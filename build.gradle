@@ -1,0 +1,20 @@
+plugins {
+	id 'application'
+	id 'java'
+}
+
+group = 'com.edaxortho'
+version = '0.0.1'
+sourceCompatibility = '11'
+mainClassName = 'com.edaxortho.interphone.InterphoneApplication'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'com.fazecast:jSerialComm:[2.0.0,3.0.0)'
+	implementation 'org.slf4j:slf4j-api:2.0.6'
+	implementation 'ch.qos.logback:logback-classic:1.4.5'
+//	implementation group: 'javazoom', name: 'jlayer', version: '1.0.1'
+}
