@@ -1,4 +1,4 @@
-package com.edaxortho.interphone;
+package com.edaxortho.interphone.util;
 
 import com.fazecast.jSerialComm.SerialPort;
 

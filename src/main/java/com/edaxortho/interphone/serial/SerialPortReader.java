@@ -1,4 +1,4 @@
-package com.edaxortho.interphone;
+package com.edaxortho.interphone.serial;
 
 import com.fazecast.jSerialComm.SerialPort;
 import com.fazecast.jSerialComm.SerialPortDataListenerWithExceptions;

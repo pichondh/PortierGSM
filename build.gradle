@@ -10,11 +10,30 @@ mainClassName = 'com.edaxortho.interphone.InterphoneApplication'
 
 repositories {
 	mavenCentral()
+	exclusiveContent {
+		forRepository {
+			maven {
+				url 'https://mlt.jfrog.io/artifactory/mlt-mvn-releases-local'
+			}
+		}
+		filter {
+			includeGroup 'de.dfki.lt.jtok'
+		}
+	}
 }
 
 dependencies {
 	implementation 'com.fazecast:jSerialComm:[2.0.0,3.0.0)'
 	implementation 'org.slf4j:slf4j-api:2.0.6'
 	implementation 'ch.qos.logback:logback-classic:1.4.5'
+	implementation 'commons-cli:commons-cli:1.5.0'
+	implementation group: 'de.dfki.mary', name: 'voice-cmu-slt-hsmm', version: '5.2.1', {
+		exclude group: 'com.twmacinta', module: 'fast-md5'
+		exclude group: 'gov.nist.math', module: 'Jampack'
+	}
+	implementation group: 'de.dfki.mary', name: 'marytts-lang-fr', version: '5.2.1', {
+		exclude group: 'com.twmacinta', module: 'fast-md5'
+		exclude group: 'gov.nist.math', module: 'Jampack'
+	}
 //	implementation group: 'javazoom', name: 'jlayer', version: '1.0.1'
 }

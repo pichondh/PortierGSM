@@ -1,20 +1,34 @@
 package com.edaxortho.interphone;
 
 
+import com.edaxortho.interphone.configuration.ConfigReader;
+import com.edaxortho.interphone.serial.SerialPortReader;
+import com.edaxortho.interphone.serial.SerialPortier;
+import com.edaxortho.interphone.serial.SerialPower;
+import com.edaxortho.interphone.util.OpeningHoursUtil;
+import com.edaxortho.interphone.util.SerialUtil;
+import com.edaxortho.marytts.PortierSpeech;
 import com.fazecast.jSerialComm.SerialPort;
+import marytts.exceptions.MaryConfigurationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 public class InterphoneApplication {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(InterphoneApplication.class);
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, MaryConfigurationException {
 
+        OpeningHoursUtil openingHoursUtil = new OpeningHoursUtil();
         ConfigReader configReader = new ConfigReader();
         configReader.init();
+        PortierSpeech portierSpeech = null;
+        if (configReader.getSYNTHESE_VOCALE()) {
+            portierSpeech = new PortierSpeech();
+        }
 
         // Sélectionnez le port série à utiliser
         SerialPort port = SerialPort.getCommPort(configReader.getPORT_COM());
@@ -54,7 +68,7 @@ public class InterphoneApplication {
             serialUtil.sendCommand("AT+CPIN?\r\n");
             Thread.sleep(1000);
             String simResponse = serialPortReader.getLastMessage();
-            if (simResponse==null || !simResponse.contains("+CPIN: READY")) {
+            if (simResponse == null || !simResponse.contains("+CPIN: READY")) {
                 LOGGER.warn("Saisie du code PIN nécessaire...");
                 serialUtil.sendCommand("AT+CPIN=" + configReader.getCODE_PIN() + "\r\n");
                 LOGGER.warn("Saisie du code PIN.");
@@ -73,9 +87,17 @@ public class InterphoneApplication {
             while (true) {
                 String msg = serialPortReader.getLastMessage();
                 if (msg != null && msg.contains("RING")) {
-                    LOGGER.info("ON DECROCHE !!!!");
                     SerialPortier serialPortier = new SerialPortier(port, serialUtil);
-                    serialPortier.decrocheEtoileRaccroche();
+                    if (openingHoursUtil.isOpen(configReader.getOpeningHours(), LocalDateTime.now())) {
+                        LOGGER.info("ON DECROCHE !!!!");
+                        serialPortier.decrocheEtoileRaccroche(true);
+                    } else {
+                        if (configReader.getSYNTHESE_VOCALE() && portierSpeech != null) {
+                            serialPortier.sendAudio(portierSpeech.getTts(configReader.getTEXTE_FERMETURE()));
+                        } else {
+                            serialPortier.decrocheEtoileRaccroche(false);
+                        }
+                    }
                 }
                 Thread.sleep(1000);
             }
