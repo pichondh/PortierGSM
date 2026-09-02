@@ -1,0 +1,43 @@
+# Exemple de config.properties pour tester PortierGSM avec le faux modem
+# (tools/fake_a7670e_modem.py) via une paire de ports serie virtuels
+# (ex: com0com, COM8 <-> COM9).
+#
+# A copier vers le conf/config.properties utilise au lancement (voir
+# tools/README.md pour l'emplacement exact selon comment vous lancez
+# l'application).
+
+# Port cote PortierGSM : l'autre extremite de la paire com0com
+# (le script tools/fake_a7670e_modem.py doit etre lance sur l'AUTRE port,
+# ex: COM9 si PORT_COM=COM8 ici).
+PORT_COM=COM8
+
+# A7670E : 115200 bauds par defaut.
+BAUD_RATE=115200
+
+# Code PIN : peu importe la valeur, le faux modem repond toujours
+# +CPIN: READY et ne demande jamais le PIN.
+CODE_PIN=0000
+
+# Script d'alimentation : jamais appele par le faux modem (qui repond tout
+# de suite a AT), la valeur n'a donc pas d'importance pour ce test.
+POWER_SCRIPT=dummy
+
+# Horaires larges pour que decrocheEtoileRaccroche(true) soit teste
+# quelle que soit l'heure a laquelle vous testez.
+MONDAY_OPEN=00:00
+MONDAY_CLOSE=23:59
+TUESDAY_OPEN=00:00
+TUESDAY_CLOSE=23:59
+WEDNESDAY_OPEN=00:00
+WEDNESDAY_CLOSE=23:59
+THURSDAY_OPEN=00:00
+THURSDAY_CLOSE=23:59
+FRIDAY_OPEN=00:00
+FRIDAY_CLOSE=23:59
+SATURDAY_OPEN=00:00
+SATURDAY_CLOSE=23:59
+SUNDAY_OPEN=00:00
+SUNDAY_CLOSE=23:59
+
+SYNTHESE_VOCALE=false
+TEXTE_FERMETURE=It's closed !
