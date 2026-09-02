@@ -16,6 +16,7 @@ public class ConfigReader {
     private static final Logger LOGGER = LoggerFactory.getLogger(ConfigReader.class);
 
     private String PORT_COM;
+    private Integer BAUD_RATE;
     private String CODE_PIN;
     private String POWER_SCRIPT;
 
@@ -42,6 +43,19 @@ public class ConfigReader {
 
             PORT_COM = prop.getProperty("PORT_COM");
             LOGGER.info("PORT_COM = " + PORT_COM);
+
+            // Vitesse de communication série avec le module GSM/4G.
+            // Le SIM800 (2G) fonctionnait à 9600 bauds ; le A7670E (4G, série SIMCom
+            // A76XX) utilise 115200 bauds par défaut. Valeur configurable ici pour
+            // s'adapter au module réellement branché ; 115200 est utilisé si la clé
+            // BAUD_RATE est absente ou invalide dans config.properties.
+            try {
+                BAUD_RATE = Integer.parseInt(prop.getProperty("BAUD_RATE", "115200").trim());
+            } catch (NumberFormatException e) {
+                LOGGER.warn("BAUD_RATE invalide dans config.properties, utilisation de 115200 par défaut (A7670E).");
+                BAUD_RATE = 115200;
+            }
+            LOGGER.info("BAUD_RATE = " + BAUD_RATE);
 
             CODE_PIN = prop.getProperty("CODE_PIN");
             LOGGER.info("CODE_PIN = " + CODE_PIN);
@@ -107,6 +121,10 @@ public class ConfigReader {
 
     public String getPORT_COM() {
         return PORT_COM;
+    }
+
+    public Integer getBAUD_RATE() {
+        return BAUD_RATE;
     }
 
     public String getTEXTE_FERMETURE() {

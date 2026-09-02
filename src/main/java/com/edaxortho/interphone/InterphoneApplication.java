@@ -9,7 +9,6 @@ import com.edaxortho.interphone.util.OpeningHoursUtil;
 import com.edaxortho.interphone.util.SerialUtil;
 import com.edaxortho.marytts.PortierSpeech;
 import com.fazecast.jSerialComm.SerialPort;
-import marytts.exceptions.MaryConfigurationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +19,7 @@ public class InterphoneApplication {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(InterphoneApplication.class);
 
-    public static void main(String[] args) throws InterruptedException, MaryConfigurationException {
+    public static void main(String[] args) throws InterruptedException {
 
         OpeningHoursUtil openingHoursUtil = new OpeningHoursUtil();
         ConfigReader configReader = new ConfigReader();
@@ -34,7 +33,10 @@ public class InterphoneApplication {
         SerialPort port = SerialPort.getCommPort(configReader.getPORT_COM());
 
         // Configurez les paramètres du port série
-        //port.setBaudRate(9600);
+        // Module A7670E (4G, série SIMCom A76XX) : 115200 bauds par défaut, contre
+        // 9600 bauds pour l'ancien module SIM800 (2G). Valeur lue depuis
+        // config.properties (clé BAUD_RATE) pour rester adaptable.
+        port.setBaudRate(configReader.getBAUD_RATE());
         port.setNumDataBits(8);
         port.setParity(SerialPort.NO_PARITY);
         port.setNumStopBits(1);
@@ -83,23 +85,37 @@ public class InterphoneApplication {
             serialUtil.sendCommand("AT+CPAS\r\n");
             Thread.sleep(1000);
 
-
+            int signalTest = 60;
             while (true) {
                 String msg = serialPortReader.getLastMessage();
-                if (msg != null && msg.contains("RING")) {
-                    SerialPortier serialPortier = new SerialPortier(port, serialUtil);
-                    if (openingHoursUtil.isOpen(configReader.getOpeningHours(), LocalDateTime.now())) {
-                        LOGGER.info("ON DECROCHE !!!!");
-                        serialPortier.decrocheEtoileRaccroche(true);
-                    } else {
-                        if (configReader.getSYNTHESE_VOCALE() && portierSpeech != null) {
-                            serialPortier.sendAudio(portierSpeech.getTts(configReader.getTEXTE_FERMETURE()));
+                if (msg != null) {
+                    if (msg.contains("RING")) {
+                        SerialPortier serialPortier = new SerialPortier(port, serialUtil);
+                        if (openingHoursUtil.isOpen(configReader.getOpeningHours(), LocalDateTime.now())) {
+                            LOGGER.info("ON DECROCHE !!!!");
+                            serialPortier.decrocheEtoileRaccroche(true);
                         } else {
-                            serialPortier.decrocheEtoileRaccroche(false);
+                            if (configReader.getSYNTHESE_VOCALE() && portierSpeech != null) {
+                                serialPortier.sendAudio(portierSpeech.getTts(configReader.getTEXTE_FERMETURE()));
+                            } else {
+                                serialPortier.decrocheEtoileRaccroche(false);
+                            }
                         }
+                    } else {
+                        LOGGER.info(">>> {}", msg);
                     }
                 }
-                Thread.sleep(1000);
+                signalTest--;
+                if (signalTest <= 0) {
+                    signalTest = 60;
+                    LOGGER.info("Test du signal...");
+                    serialUtil.sendCommand("AT+CSQ\r\n");
+                    Thread.sleep(1000);
+                    String signalTestResponse = serialPortReader.getLastMessage();
+                    LOGGER.info("Signal : {}", signalTestResponse);
+                } else {
+                    Thread.sleep(1000);
+                }
             }
 
 
