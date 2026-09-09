@@ -12,39 +12,68 @@ The hardware environment used is a "Raspberry PI3" with a GSM module.
 
 ## Module GSM
 
-Le projet a été initialement développé pour un module **SIM800 (2G)**.
-La 2G étant progressivement désactivée par les opérateurs, le projet a été migré
-vers un module **A7670E (LTE Cat-1 / 4G, série SIMCom A76XX)**, compatible
-2G en secours selon les zones.
+Le projet a été initialement développé pour un module **SIM800 (2G)**. La 2G
+étant progressivement désactivée par les opérateurs (en France : arrêt entre
+le 22 septembre et le 20 octobre 2026 selon les zones), le projet a été migré :
 
-Points d'attention lors du remplacement du module :
+1. Un premier essai avec un module **A7670E (LTE Cat-1 / 4G, série SIMCom
+   A76XX)** a été fait, puis abandonné et retourné : ce module ne supporte
+   que 2G + 4G (pas de 3G), et sans VoLTE documenté, il n'aurait plus eu
+   aucun moyen de recevoir un appel vocal une fois la 2G coupée (repli CSFB
+   impossible).
+2. Le module retenu est un **SIM7600E-H (LTE Cat-4 / 4G+3G+2G, série SIMCom
+   SIM7600)**, HAT Waveshare (bandes Europe B1/B3/B5/B7/B8/B20). Il supporte
+   la 3G, ce qui garantit un repli CSFB possible pour les appels vocaux au
+   moins jusqu'à l'arrêt de la 3G chez les opérateurs français (2028 chez
+   Orange, dont dépend l'itinérance Free). Son firmware documente aussi une
+   commande VoLTE (`AT+VOLTESETTING`), une option à creuser plus tard si
+   besoin, sans garantie de provisionnement côté opérateur.
 
-- **Vitesse série (BAUD_RATE)** : le SIM800 fonctionnait à 9600 bauds, le A7670E
-  fonctionne à 115200 bauds par défaut. C'est désormais configurable via la clé
-  `BAUD_RATE` de `config.properties` (115200 par défaut si absente).
-- **Port série (PORT_COM)** : selon le module/HAT utilisé, le chemin du port AT
-  sur le Raspberry Pi peut changer (ex. `/dev/ttyS0`, `/dev/ttyAMA0`,
-  `/dev/ttyUSB2`...). À vérifier/adapter dans `config.properties` pour le
-  A7670E.
+Points d'attention liés au module actuellement utilisé (SIM7600E-H) :
+
+- **Vitesse série (BAUD_RATE)** : 115200 bauds par défaut, comme le A7670E
+  testé précédemment (contre 9600 bauds pour l'ancien SIM800 2G).
+  Configurable via la clé `BAUD_RATE` de `config.properties` (115200 par
+  défaut si absente).
+- **Port série (PORT_COM)** : à revérifier à chaque changement de module/HAT
+  (le mapping des ports USB change). Le SIM7600E-H expose plusieurs ports
+  (USB natif `MAIN`/`AUX`, plus le port USB-UART CP2102 selon la position du
+  cavalier "UART JMP" sur la HAT) — utiliser la même méthode de découverte
+  que pour le A7670E (`screen /dev/ttyUSBx 115200`, `AT+CLIP=1`, appel test)
+  pour identifier le bon port avant de renseigner `PORT_COM`.
+- **`AT+CVHU=0` requis pour que `ATH` raccroche** : contrairement au A7670E,
+  la doc SIMCom du SIM7600 précise qu'il faut envoyer `AT+CVHU=0` avant que
+  `ATH` ne raccroche effectivement un appel vocal. Cette commande est
+  envoyée une fois au démarrage dans `InterphoneApplication.java`.
 - **Commandes AT supprimées** : `AT+DDET` et `AT+CHFA`, spécifiques au SIM800,
-  n'existent pas dans le jeu de commandes AT du A7670E et ont été retirées du
-  code (voir `SerialPortier.java`). Les commandes standard utilisées pour
-  répondre à l'appel et envoyer la tonalité DTMF `*` (`ATA`, `AT+VTS`, `ATH`,
-  `AT+CLIP`, `AT+CPAS`, `AT+CSQ`, `AT+CPIN`) restent, elles, supportées par les
-  deux modules.
+  n'existent pas dans le jeu de commandes AT des modules 4G utilisés et ont
+  été retirées du code (voir `SerialPortier.java`). Les commandes standard
+  utilisées pour répondre à l'appel et envoyer la tonalité DTMF `*` (`ATA`,
+  `AT+VTS`, `ATH`, `AT+CLIP`, `AT+CPAS`, `AT+CSQ`, `AT+CPIN`) sont supportées
+  par le SIM800, le A7670E et le SIM7600E-H.
 - **Synthèse vocale (`SYNTHESE_VOCALE=true`)** : cette option jouait un message
   audio de fermeture en écrivant les échantillons PCM directement sur le port
-  série AT après `AT+CHFA=1` (astuce spécifique au SIM800). Le A7670E ne
-  propose pas de canal audio numérique équivalent sur son port AT ; en l'état,
-  si cette option est activée, le programme se contente de décrocher puis
-  raccrocher sans diffuser le message (avec un avertissement dans les logs).
-  Une implémentation alternative (interface audio USB du A7670E) resterait à
-  faire si cette fonctionnalité est nécessaire.
-- **Script d'alimentation (`POWER_SCRIPT`, `GSM_PWR.py`)** : ce script (hors de
-  ce dépôt, déployé séparément sur le Raspberry Pi) pilote probablement la
-  broche PWRKEY du module en GPIO. Le câblage/GPIO du HAT A7670E pouvant
-  différer de celui du HAT SIM800, pensez à vérifier/adapter ce script sur le
-  Raspberry Pi.
+  série AT après `AT+CHFA=1` (astuce spécifique au SIM800), non reprise pour
+  le A7670E ni le SIM7600E-H : en l'état, si cette option est activée, le
+  programme se contente de décrocher puis raccrocher sans diffuser le message
+  (avertissement dans les logs). Piste pour une vraie implémentation future :
+  le SIM7600E-H documente `AT+CSDVC` (bascule du canal audio) et la HAT
+  Waveshare a un jack audio 3.5mm câblé au module — probablement exploitable,
+  mais pas implémenté à ce jour.
+- **Alimentation du module / `POWER_SCRIPT` (`GSM_PWR.py`)** : ⚠️ le script
+  actuel (`tools/GSM_PWR.py` dans ce dépôt, copie du script déployé sur le
+  Raspberry Pi) pulse la broche GPIO4 (pin physique 7, câblage du HAT SIM800)
+  — ce n'est **pas** la bonne broche pour le HAT SIM7600E-H. Sur cette HAT,
+  par défaut, un cavalier relie `PWR` à `3V3` et **le module s'allume tout
+  seul dès qu'il est alimenté, sans intervention GPIO**. Le contrôle logiciel
+  du démarrage (si un jour nécessaire) se fait en déplaçant ce cavalier sur
+  `PWR`-`D6` et en pilotant le **GPIO6** (et non plus GPIO4) depuis le Pi.
+  Tant que le cavalier reste sur sa position par défaut, ce script ne devrait
+  jamais être appelé en pratique (le module répond à `AT` dès le démarrage) ;
+  s'il l'était malgré tout, il n'aurait normalement aucun effet sur le
+  SIM7600E-H (broche non utilisée par cette HAT) mais mieux vaut le mettre à
+  jour ou le neutraliser plutôt que de laisser une commande obsolète en
+  place.
 
 Lancement du programme au démarrage du RPI
 /etc/rc.local

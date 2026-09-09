@@ -27,19 +27,22 @@ public class SerialPortier {
 
         if(withStar) {
             // Envoyer la commande AT pour envoyer la tonalité DTMF correspondant à l'étoile '*'
-            // Note migration SIM800 -> A7670E : AT+VTS est supporté nativement par le
-            // A7670E (série SIMCom A76XX) et fonctionne seul, sans commande préalable.
-            // La commande AT+DDET (activation/désactivation du détecteur DTMF), utilisée
-            // ici sur le SIM800, a été retirée car elle est absente du jeu de commandes
-            // AT du A7670E (cf. A76XX Series AT Command Manual) : l'envoyer provoquerait
-            // une erreur AT sans bloquer le fonctionnement, mais elle est désormais inutile.
+            // Historique migration SIM800 -> A7670E -> SIM7600E-H (module final retenu) :
+            // AT+VTS est une commande standard supportée nativement par les deux modules
+            // 4G SIMCom testés (A76XX et SIM7600) et fonctionne seule, sans commande
+            // préalable. AT+DDET (activation/désactivation du détecteur DTMF), utilisée
+            // sur l'ancien SIM800, a été retirée : absente du jeu de commandes AT des
+            // modules 4G, elle provoquerait juste une erreur AT sans rien bloquer.
             serialUtil.sendCommand("AT+VTS=*\r\n");
             Thread.sleep(1000);
         } else {
             LOGGER.info("Reception d'un appel en période de fermeture");
         }
 
-        // Envoyer la commande AT pour raccrocher
+        // Envoyer la commande AT pour raccrocher.
+        // Sur le SIM7600E-H, ATH ne raccroche effectivement l'appel que si
+        // AT+CVHU=0 a été envoyé au préalable (fait une fois au démarrage dans
+        // InterphoneApplication) - sans quoi ATH peut ne rien faire.
         serialUtil.sendCommand("ATH\r\n");
         Thread.sleep(1000);
 
@@ -51,20 +54,20 @@ public class SerialPortier {
      * Décroche un appel reçu en période de fermeture et tente de diffuser un message
      * vocal de synthèse (option SYNTHESE_VOCALE=true dans config.properties).
      * <p>
-     * Note migration SIM800 -> A7670E : cette fonctionnalité reposait sur une commande
-     * spécifique au SIM800, AT+CHFA ("Switch Handsfree/Audio Channel"), qui bascule le
-     * port série AT en un mode où les octets écrits ensuite sont transmis directement
-     * comme échantillons audio PCM vers le correspondant. AT+CHFA n'existe pas dans le
-     * jeu de commandes AT du A7670E (série SIMCom A76XX) : le module ne propose pas ce
-     * mode audio numérique sur son port AT. Écrire les échantillons PCM sur ce port
-     * serait donc interprété comme des commandes AT invalides et risquerait de
-     * désynchroniser le module (voire de nécessiter un redémarrage).
+     * Historique : cette fonctionnalité reposait sur AT+CHFA, une commande spécifique
+     * au SIM800 ("Switch Handsfree/Audio Channel") qui bascule le port série AT en un
+     * mode où les octets écrits ensuite sont transmis directement comme échantillons
+     * audio PCM. Absente du A7670E (module testé puis retourné), remplacé depuis par
+     * le SIM7600E-H.
      * <p>
-     * Tant qu'une solution équivalente n'a pas été implémentée pour le A7670E (le
-     * module expose une interface audio numérique/USB séparée qu'il faudrait piloter
-     * différemment, cf. doc SIMCom "USB AUDIO Application Note"), on se contente ici de
-     * décrocher puis raccrocher sans diffuser le message, plutôt que d'envoyer des
-     * données susceptibles de perturber le module.
+     * Piste non explorée pour le SIM7600E-H : contrairement au A7670E, ce module
+     * documente AT+CSDVC (bascule du canal audio casque/haut-parleur) et la HAT
+     * Waveshare expose un vrai jack audio 3.5mm câblé au module - une vraie diffusion
+     * audio est donc probablement possible ici, mais nécessiterait une implémentation
+     * différente (routage audio physique/AT+CSDVC, pas d'écriture de PCM brut sur le
+     * port AT) qui n'a pas été faite. Tant que ce n'est pas implémenté, on se contente
+     * ici de décrocher puis raccrocher sans diffuser le message, plutôt que d'envoyer
+     * des données susceptibles de perturber le module.
      */
     public void sendAudio(double[] buffer) throws InterruptedException {
         LOGGER.info("Reception d'un appel en période de fermeture");
@@ -73,9 +76,9 @@ public class SerialPortier {
         serialUtil.sendCommand("ATA\r\n");
         Thread.sleep(1000);
 
-        LOGGER.warn("Synthèse vocale (SYNTHESE_VOCALE=true) demandée mais non supportée en l'état " +
-                "par le module A7670E (pas d'équivalent à AT+CHFA du SIM800) : l'appel est raccroché " +
-                "sans diffusion du message. Voir SerialPortier#sendAudio.");
+        LOGGER.warn("Synthèse vocale (SYNTHESE_VOCALE=true) demandée mais non implémentée pour le " +
+                "module SIM7600E-H (voir le commentaire de SerialPortier#sendAudio) : l'appel est " +
+                "raccroché sans diffusion du message.");
 
         serialUtil.sendCommand("ATH\r\n");
         Thread.sleep(1000);

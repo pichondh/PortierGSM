@@ -33,9 +33,10 @@ public class InterphoneApplication {
         SerialPort port = SerialPort.getCommPort(configReader.getPORT_COM());
 
         // Configurez les paramètres du port série
-        // Module A7670E (4G, série SIMCom A76XX) : 115200 bauds par défaut, contre
-        // 9600 bauds pour l'ancien module SIM800 (2G). Valeur lue depuis
-        // config.properties (clé BAUD_RATE) pour rester adaptable.
+        // Module SIM7600E-H (4G Cat-4, série SIMCom SIM7600) : 115200 bauds par
+        // défaut (identique au A7670E testé initialement, et différent des 9600
+        // bauds de l'ancien SIM800 2G). Valeur lue depuis config.properties (clé
+        // BAUD_RATE) pour rester adaptable si le module venait encore à changer.
         port.setBaudRate(configReader.getBAUD_RATE());
         port.setNumDataBits(8);
         port.setParity(SerialPort.NO_PARITY);
@@ -78,6 +79,15 @@ public class InterphoneApplication {
             }
 
             serialUtil.sendCommand("AT+CLIP=1\r\n");
+            Thread.sleep(1000);
+
+            // Autoriser ATH à raccrocher un appel vocal. Nécessaire sur le SIM7600E-H
+            // (série SIMCom SIM7600) : contrairement au A7670E où ATH raccrochait
+            // directement, la doc SIMCom précise "Before using ATH command to hang up
+            // a voice call, it must set AT+CVHU=0" - sans ça, SerialPortier#ATH risque
+            // de ne pas raccrocher l'appel. Sans effet néfaste si le module ne
+            // reconnaît pas la commande (répond simplement ERROR).
+            serialUtil.sendCommand("AT+CVHU=0\r\n");
             Thread.sleep(1000);
 
             // Attendre un appel entrant
