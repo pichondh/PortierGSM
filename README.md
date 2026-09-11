@@ -60,20 +60,17 @@ Points d'attention liés au module actuellement utilisé (SIM7600E-H) :
   le SIM7600E-H documente `AT+CSDVC` (bascule du canal audio) et la HAT
   Waveshare a un jack audio 3.5mm câblé au module — probablement exploitable,
   mais pas implémenté à ce jour.
-- **Alimentation du module / `POWER_SCRIPT` (`GSM_PWR.py`)** : ⚠️ le script
-  actuel (`tools/GSM_PWR.py` dans ce dépôt, copie du script déployé sur le
-  Raspberry Pi) pulse la broche GPIO4 (pin physique 7, câblage du HAT SIM800)
-  — ce n'est **pas** la bonne broche pour le HAT SIM7600E-H. Sur cette HAT,
-  par défaut, un cavalier relie `PWR` à `3V3` et **le module s'allume tout
-  seul dès qu'il est alimenté, sans intervention GPIO**. Le contrôle logiciel
-  du démarrage (si un jour nécessaire) se fait en déplaçant ce cavalier sur
-  `PWR`-`D6` et en pilotant le **GPIO6** (et non plus GPIO4) depuis le Pi.
-  Tant que le cavalier reste sur sa position par défaut, ce script ne devrait
-  jamais être appelé en pratique (le module répond à `AT` dès le démarrage) ;
-  s'il l'était malgré tout, il n'aurait normalement aucun effet sur le
-  SIM7600E-H (broche non utilisée par cette HAT) mais mieux vaut le mettre à
-  jour ou le neutraliser plutôt que de laisser une commande obsolète en
-  place.
+- **Alimentation du module / `POWER_SCRIPT` (`GSM_PWR.py`)** : sur le HAT
+  SIM7600E-H, par défaut, un cavalier relie `PWR` à `3V3` et **le module
+  s'allume tout seul dès qu'il est alimenté, sans intervention GPIO** — ce
+  script n'est donc plus nécessaire (il l'était pour piloter le PWRKEY du HAT
+  SIM800 via GPIO4 / pin physique 7). Le code de `tools/GSM_PWR.py` est
+  désormais **commenté** (neutralisé) pour cette raison : s'il est encore
+  appelé en fallback par `InterphoneApplication` (cas où le module ne répond
+  pas à `AT` au démarrage), il ne fait rien. Si un contrôle logiciel du
+  démarrage devient un jour nécessaire, il faudra déplacer le cavalier de la
+  HAT sur `PWR`-`D6`, puis décommenter le script en remplaçant le pin GPIO4
+  par le bon pin BOARD pour **GPIO6**.
 
 Lancement du programme au démarrage du RPI
 /etc/rc.local
