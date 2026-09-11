@@ -14,8 +14,13 @@
     --accent: #2563eb;
     --accent-dark: #1d4ed8;
     --good: #16a34a;
+    --good-bg: #eafaf0;
     --warn: #d97706;
+    --warn-bg: #fff7e6;
     --bad: #dc2626;
+    --bad-bg: #fdecec;
+    --unknown: #6b7280;
+    --unknown-bg: #f0f1f3;
     --danger: #dc2626;
     --danger-dark: #b91c1c;
   }
@@ -28,44 +33,107 @@
     padding: 16px;
   }
   h1 {
-    font-size: 1.25rem;
+    font-size: 1.3rem;
     margin: 0 0 16px 0;
+    text-align: center;
   }
   h2 {
     font-size: 1rem;
     margin: 0 0 12px 0;
   }
+  h3 {
+    font-size: 0.9rem;
+    margin: 18px 0 10px 0;
+    color: var(--muted);
+  }
   .grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 14px;
-    max-width: 720px;
+    max-width: 560px;
     margin: 0 auto;
   }
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 16px;
   }
-  .signal-row {
+
+  /* Bandeau d'état, gros et visible pour un coup d'oeil rapide */
+  .status-banner {
     display: flex;
     align-items: center;
     gap: 16px;
-    flex-wrap: wrap;
+    border-radius: 14px;
+    padding: 20px;
+    border: 1px solid var(--border);
   }
-  .signal-badge {
-    font-size: 1.6rem;
-    font-weight: 700;
-    padding: 6px 14px;
-    border-radius: 8px;
+  .status-banner.good { background: var(--good-bg); border-color: var(--good); }
+  .status-banner.warn { background: var(--warn-bg); border-color: var(--warn); }
+  .status-banner.bad { background: var(--bad-bg); border-color: var(--bad); }
+  .status-banner.unknown { background: var(--unknown-bg); border-color: var(--border); }
+  .status-icon { font-size: 2.4rem; line-height: 1; }
+  .status-title { font-size: 1.25rem; font-weight: 700; }
+  .status-banner.good .status-title { color: var(--good); }
+  .status-banner.warn .status-title { color: var(--warn); }
+  .status-banner.bad .status-title { color: var(--bad); }
+  .status-banner.unknown .status-title { color: var(--unknown); }
+  .status-sub { color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+
+  .today-hours {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  /* Liste d'appels, format "carte" plus lisible qu'un tableau sur mobile */
+  .calls-list { list-style: none; margin: 0; padding: 0; }
+  .calls-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .calls-list li:last-child { border-bottom: none; }
+  .call-icon { font-size: 1.4rem; }
+  .call-main { flex: 1; min-width: 0; }
+  .call-time { font-weight: 600; font-size: 0.95rem; }
+  .call-number { color: var(--muted); font-size: 0.85rem; }
+  .call-pill {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 12px;
     color: #fff;
+    white-space: nowrap;
   }
-  .signal-badge.good { background: var(--good); }
-  .signal-badge.warn { background: var(--warn); }
-  .signal-badge.bad { background: var(--bad); }
-  .signal-badge.unknown { background: var(--muted); }
-  .signal-meta { color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+  .call-pill.accepted { background: var(--good); }
+  .call-pill.refused { background: var(--bad); }
+  .calls-empty, .chart-empty { color: var(--muted); font-size: 0.85rem; padding: 10px 0; text-align: center; }
+
+  /* Réglages avancés, repliés par défaut */
+  details.card { padding: 0; overflow: hidden; }
+  details.card summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+  }
+  details.card summary::-webkit-details-marker { display: none; }
+  .chevron { transition: transform 0.15s ease; color: var(--muted); }
+  details[open] .chevron { transform: rotate(90deg); }
+  .advanced-content { padding: 0 16px 16px 16px; border-top: 1px solid var(--border); }
+  .advanced-block { margin-top: 16px; }
+  .advanced-block:first-child { margin-top: 16px; }
+
+  .signal-detail { color: var(--muted); font-size: 0.85rem; }
+
   .range-buttons { display: flex; gap: 8px; margin-bottom: 10px; }
   .range-buttons button {
     border: 1px solid var(--border);
@@ -76,18 +144,14 @@
     cursor: pointer;
     color: var(--text);
   }
-  .range-buttons button.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-  }
-  canvas { width: 100%; height: 160px; display: block; }
-  .chart-empty { color: var(--muted); font-size: 0.85rem; padding: 20px 0; text-align: center; }
+  .range-buttons button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  canvas { width: 100%; height: 140px; display: block; }
+
   table.hours { width: 100%; border-collapse: collapse; }
   table.hours th, table.hours td {
     padding: 6px 4px;
     text-align: left;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     border-bottom: 1px solid var(--border);
   }
   table.hours th { color: var(--muted); font-weight: 500; }
@@ -95,14 +159,15 @@
     padding: 4px 6px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     width: 100%;
   }
+
   .btn {
     border: none;
     border-radius: 8px;
     padding: 10px 18px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     cursor: pointer;
     color: #fff;
   }
@@ -110,91 +175,87 @@
   .btn-primary:hover { background: var(--accent-dark); }
   .btn-danger { background: var(--danger); }
   .btn-danger:hover { background: var(--danger-dark); }
-  .actions { margin-top: 14px; display: flex; justify-content: flex-end; }
+  .actions { margin-top: 12px; display: flex; justify-content: flex-end; }
   .status-msg { font-size: 0.85rem; margin-top: 8px; min-height: 1.2em; }
   .status-msg.ok { color: var(--good); }
   .status-msg.error { color: var(--bad); }
   .reboot-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; }
-  .build-info { color: var(--muted); font-size: 0.8rem; margin: -10px 0 16px 0; }
-  table.calls { width: 100%; border-collapse: collapse; }
-  table.calls th, table.calls td {
-    padding: 6px 4px;
-    text-align: left;
-    font-size: 0.85rem;
-    border-bottom: 1px solid var(--border);
+
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin: 20px 0 4px 0;
   }
-  table.calls th { color: var(--muted); font-weight: 500; }
-  .call-status {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #fff;
-  }
-  .call-status.accepted { background: var(--good); }
-  .call-status.refused { background: var(--bad); }
-  .calls-empty { color: var(--muted); font-size: 0.85rem; padding: 10px 0; }
 </style>
 </head>
 <body>
 <div class="grid">
   <h1>Supervision PortierGSM</h1>
-  <div id="build-info" class="build-info">Version : --</div>
 
-  <div class="card">
-    <h2>Qualité du signal</h2>
-    <div class="signal-row">
-      <div id="signal-badge" class="signal-badge unknown">--</div>
-      <div class="signal-meta">
-        <div id="signal-dbm">Signal inconnu</div>
-        <div id="signal-updated">Dernière mesure : --</div>
-      </div>
+  <div id="status-banner" class="status-banner unknown">
+    <div id="status-icon" class="status-icon">❔</div>
+    <div>
+      <div id="status-title" class="status-title">Vérification en cours…</div>
+      <div id="status-sub" class="status-sub">--</div>
     </div>
   </div>
 
-  <div class="card">
-    <h2>Historique du signal</h2>
-    <div class="range-buttons">
-      <button data-days="1" class="active">24 h</button>
-      <button data-days="7">7 jours</button>
-      <button data-days="30">30 jours</button>
-    </div>
-    <canvas id="chart" width="640" height="160"></canvas>
-    <div id="chart-empty" class="chart-empty" style="display:none">Pas encore assez de mesures.</div>
-  </div>
+  <div id="today-hours" class="today-hours">--</div>
 
   <div class="card">
-    <h2>Appels reçus</h2>
-    <table class="calls">
-      <thead><tr><th>Heure</th><th>Numéro</th><th>Statut</th></tr></thead>
-      <tbody id="calls-body"></tbody>
-    </table>
+    <h2>Derniers appels</h2>
+    <ul id="calls-list" class="calls-list"></ul>
     <div id="calls-empty" class="calls-empty" style="display:none">Aucun appel enregistré pour le moment.</div>
   </div>
 
-  <div class="card">
-    <h2>Horaires d'ouverture</h2>
-    <form id="hours-form">
-      <table class="hours">
-        <thead><tr><th>Jour</th><th>Ouverture</th><th>Fermeture</th></tr></thead>
-        <tbody id="hours-body"></tbody>
-      </table>
-      <div class="actions">
-        <button type="submit" class="btn btn-primary">Enregistrer</button>
-      </div>
-      <div id="hours-status" class="status-msg"></div>
-    </form>
-  </div>
+  <details class="card">
+    <summary><span class="chevron">▶</span> Réglages avancés</summary>
+    <div class="advanced-content">
 
-  <div class="card">
-    <h2>Redémarrage</h2>
-    <div class="reboot-desc">Redémarre complètement la Raspberry Pi (coupure du service pendant environ une minute).</div>
-    <div class="actions">
-      <button id="reboot-btn" class="btn btn-danger">Redémarrer la Raspberry Pi</button>
+      <div class="advanced-block">
+        <h3>Détail du signal</h3>
+        <div id="signal-detail" class="signal-detail">--</div>
+      </div>
+
+      <div class="advanced-block">
+        <h3>Historique du signal</h3>
+        <div class="range-buttons">
+          <button data-days="1" class="active">24 h</button>
+          <button data-days="7">7 jours</button>
+          <button data-days="30">30 jours</button>
+        </div>
+        <canvas id="chart" width="500" height="140"></canvas>
+        <div id="chart-empty" class="chart-empty" style="display:none">Pas encore assez de mesures.</div>
+      </div>
+
+      <div class="advanced-block">
+        <h3>Horaires d'ouverture</h3>
+        <form id="hours-form">
+          <table class="hours">
+            <thead><tr><th>Jour</th><th>Ouverture</th><th>Fermeture</th></tr></thead>
+            <tbody id="hours-body"></tbody>
+          </table>
+          <div class="actions">
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+          </div>
+          <div id="hours-status" class="status-msg"></div>
+        </form>
+      </div>
+
+      <div class="advanced-block">
+        <h3>Redémarrage</h3>
+        <div class="reboot-desc">Redémarre complètement la Raspberry Pi (coupure du service pendant environ une minute).</div>
+        <div class="actions">
+          <button id="reboot-btn" class="btn btn-danger">Redémarrer la Raspberry Pi</button>
+        </div>
+        <div id="reboot-status" class="status-msg"></div>
+      </div>
+
     </div>
-    <div id="reboot-status" class="status-msg"></div>
-  </div>
+  </details>
+
+  <div id="build-info" class="footer">Version : --</div>
 </div>
 
 <script>
@@ -202,45 +263,22 @@
     ["MONDAY", "Lundi"], ["TUESDAY", "Mardi"], ["WEDNESDAY", "Mercredi"],
     ["THURSDAY", "Jeudi"], ["FRIDAY", "Vendredi"], ["SATURDAY", "Samedi"], ["SUNDAY", "Dimanche"]
   ];
+  var DAY_INDEX_TO_KEY = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 
-  function qualityClass(csq) {
-    if (csq === null || csq === undefined) return "unknown";
-    if (csq >= 15) return "good";
-    if (csq >= 10) return "warn";
-    return "bad";
-  }
-
-  function fetchStatus() {
-    fetch("/api/status").then(function (r) { return r.json(); }).then(function (data) {
-      var badge = document.getElementById("signal-badge");
-      badge.textContent = data.csq === null ? "--" : data.csq;
-      badge.className = "signal-badge " + qualityClass(data.csq);
-
-      document.getElementById("signal-dbm").textContent =
-        (data.quality || "Inconnu") + (data.dbm !== null ? " (" + data.dbm + " dBm)" : "");
-      document.getElementById("signal-updated").textContent =
-        "Dernière mesure : " + (data.lastUpdate ? formatTs(data.lastUpdate) : "aucune pour le moment");
-
-      var buildInfoEl = document.getElementById("build-info");
-      if (buildInfoEl) {
-        buildInfoEl.textContent = "Version : " + (data.projectVersion || "?") + " · build " + (data.buildNumber || "?");
+  function formatFriendly(iso) {
+    try {
+      var d = new Date(iso);
+      var now = new Date();
+      var sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      var timeStr = d.toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"});
+      if (sameDay) {
+        return "aujourd'hui à " + timeStr;
       }
-
-      var tbody = document.getElementById("hours-body");
-      tbody.innerHTML = "";
-      DAYS.forEach(function (d) {
-        var key = d[0], label = d[1];
-        var entry = (data.openingHours && data.openingHours[key]) || {open: "", close: ""};
-        var tr = document.createElement("tr");
-        tr.innerHTML =
-          "<td>" + label + "</td>" +
-          "<td><input type=\"time\" name=\"" + key + "_OPEN\" value=\"" + entry.open + "\"></td>" +
-          "<td><input type=\"time\" name=\"" + key + "_CLOSE\" value=\"" + entry.close + "\"></td>";
-        tbody.appendChild(tr);
-      });
-    }).catch(function (e) {
-      console.error("Erreur /api/status", e);
-    });
+      var dateStr = d.toLocaleDateString("fr-FR", {day: "2-digit", month: "2-digit"});
+      return "le " + dateStr + " à " + timeStr;
+    } catch (e) {
+      return iso;
+    }
   }
 
   function formatTs(iso) {
@@ -250,6 +288,109 @@
     } catch (e) {
       return iso;
     }
+  }
+
+  function escapeHtml(value) {
+    var div = document.createElement("div");
+    div.textContent = value == null ? "" : value;
+    return div.innerHTML;
+  }
+
+  function updateStatusBanner(data) {
+    var banner = document.getElementById("status-banner");
+    var icon = document.getElementById("status-icon");
+    var title = document.getElementById("status-title");
+    var sub = document.getElementById("status-sub");
+
+    var csq = data.csq;
+    var cls, iconTxt, titleTxt;
+    if (csq === null || csq === undefined) {
+      cls = "unknown"; iconTxt = "❔"; titleTxt = "Vérification en cours…";
+    } else if (csq >= 15) {
+      cls = "good"; iconTxt = "✅"; titleTxt = "Tout va bien";
+    } else if (csq >= 10) {
+      cls = "warn"; iconTxt = "⚠️"; titleTxt = "Signal moyen";
+    } else {
+      cls = "bad"; iconTxt = "⚠️"; titleTxt = "Signal faible";
+    }
+    banner.className = "status-banner " + cls;
+    icon.textContent = iconTxt;
+    title.textContent = titleTxt;
+    sub.textContent = data.lastUpdate ? ("Signal vérifié " + formatFriendly(data.lastUpdate)) : "Pas encore de mesure";
+
+    var detail = document.getElementById("signal-detail");
+    detail.textContent = (data.quality || "Inconnu") +
+      (data.dbm !== null && data.dbm !== undefined ? " (" + data.dbm + " dBm, CSQ " + data.csq + ")" : "");
+  }
+
+  function updateTodayHours(openingHours) {
+    var el = document.getElementById("today-hours");
+    var key = DAY_INDEX_TO_KEY[new Date().getDay()];
+    var entry = (openingHours && openingHours[key]) || {open: "", close: ""};
+    if (!entry.open || !entry.close || entry.open === entry.close) {
+      el.textContent = "Fermé aujourd'hui";
+    } else {
+      el.textContent = "Aujourd'hui : ouvert de " + entry.open + " à " + entry.close;
+    }
+  }
+
+  function updateHoursForm(openingHours) {
+    var tbody = document.getElementById("hours-body");
+    tbody.innerHTML = "";
+    DAYS.forEach(function (d) {
+      var key = d[0], label = d[1];
+      var entry = (openingHours && openingHours[key]) || {open: "", close: ""};
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + label + "</td>" +
+        "<td><input type=\"time\" name=\"" + key + "_OPEN\" value=\"" + entry.open + "\"></td>" +
+        "<td><input type=\"time\" name=\"" + key + "_CLOSE\" value=\"" + entry.close + "\"></td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  function fetchStatus() {
+    fetch("/api/status").then(function (r) { return r.json(); }).then(function (data) {
+      updateStatusBanner(data);
+      updateTodayHours(data.openingHours);
+      updateHoursForm(data.openingHours);
+
+      var buildInfoEl = document.getElementById("build-info");
+      if (buildInfoEl) {
+        buildInfoEl.textContent = "Version : " + (data.projectVersion || "?") + " · build " + (data.buildNumber || "?");
+      }
+    }).catch(function (e) {
+      console.error("Erreur /api/status", e);
+    });
+  }
+
+  function fetchCalls() {
+    fetch("/api/calls?limit=15").then(function (r) { return r.json(); }).then(function (data) {
+      var calls = data.calls || [];
+      var list = document.getElementById("calls-list");
+      var emptyMsg = document.getElementById("calls-empty");
+      list.innerHTML = "";
+      if (!calls.length) {
+        emptyMsg.style.display = "block";
+        return;
+      }
+      emptyMsg.style.display = "none";
+      calls.forEach(function (c) {
+        var li = document.createElement("li");
+        var accepted = c.accepted;
+        var number = (!c.number || c.number === "inconnu") ? "Numéro masqué" : c.number;
+        li.innerHTML =
+          "<div class=\"call-icon\">" + (accepted ? "🟢" : "🔴") + "</div>" +
+          "<div class=\"call-main\">" +
+            "<div class=\"call-time\">" + formatFriendly(c.ts) + "</div>" +
+            "<div class=\"call-number\">" + escapeHtml(number) + "</div>" +
+          "</div>" +
+          "<div class=\"call-pill " + (accepted ? "accepted" : "refused") + "\">" + (accepted ? "Ouvert" : "Refusé (fermé)") + "</div>";
+        list.appendChild(li);
+      });
+    }).catch(function (e) {
+      console.error("Erreur /api/calls", e);
+    });
   }
 
   var currentDays = 1;
@@ -271,9 +412,9 @@
     var emptyMsg = document.getElementById("chart-empty");
     var ctx = canvas.getContext("2d");
 
-    var cssWidth = canvas.clientWidth || 640;
+    var cssWidth = canvas.clientWidth || 500;
     canvas.width = cssWidth;
-    canvas.height = 160;
+    canvas.height = 140;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (!measurements.length) {
@@ -284,12 +425,11 @@
     canvas.style.display = "block";
     emptyMsg.style.display = "none";
 
-    var padding = 24;
+    var padding = 22;
     var w = canvas.width - padding * 2;
     var h = canvas.height - padding * 2;
     var maxCsq = 31;
 
-    // axes
     ctx.strokeStyle = "#e5e7eb";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -311,42 +451,10 @@
     ctx.stroke();
 
     ctx.fillStyle = "#6b7280";
-    ctx.font = "11px sans-serif";
+    ctx.font = "10px sans-serif";
     ctx.fillText(formatTs(measurements[0].ts), padding, canvas.height - 4);
     var lastLabel = formatTs(measurements[n - 1].ts);
     ctx.fillText(lastLabel, canvas.width - padding - ctx.measureText(lastLabel).width, canvas.height - 4);
-  }
-
-  function fetchCalls() {
-    fetch("/api/calls?limit=20").then(function (r) { return r.json(); }).then(function (data) {
-      var calls = data.calls || [];
-      var tbody = document.getElementById("calls-body");
-      var emptyMsg = document.getElementById("calls-empty");
-      tbody.innerHTML = "";
-      if (!calls.length) {
-        emptyMsg.style.display = "block";
-        return;
-      }
-      emptyMsg.style.display = "none";
-      calls.forEach(function (c) {
-        var tr = document.createElement("tr");
-        var statusClass = c.accepted ? "accepted" : "refused";
-        var statusLabel = c.accepted ? "Ouvert" : "Refusé (fermé)";
-        tr.innerHTML =
-          "<td>" + formatTs(c.ts) + "</td>" +
-          "<td>" + escapeHtml(c.number) + "</td>" +
-          "<td><span class=\"call-status " + statusClass + "\">" + statusLabel + "</span></td>";
-        tbody.appendChild(tr);
-      });
-    }).catch(function (e) {
-      console.error("Erreur /api/calls", e);
-    });
-  }
-
-  function escapeHtml(value) {
-    var div = document.createElement("div");
-    div.textContent = value == null ? "" : value;
-    return div.innerHTML;
   }
 
   document.querySelectorAll(".range-buttons button").forEach(function (btn) {
@@ -376,6 +484,7 @@
       if (r.ok) {
         statusEl.textContent = "Horaires enregistrés.";
         statusEl.className = "status-msg ok";
+        fetchStatus();
       } else {
         return r.text().then(function (t) { throw new Error(t); });
       }
