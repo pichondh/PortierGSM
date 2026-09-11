@@ -199,8 +199,8 @@
         var tr = document.createElement("tr");
         tr.innerHTML =
           "<td>" + label + "</td>" +
-          "<td><input type=\\"time\\" name=\\"" + key + "_OPEN\\" value=\\"" + entry.open + "\\"></td>" +
-          "<td><input type=\\"time\\" name=\\"" + key + "_CLOSE\\" value=\\"" + entry.close + "\\"></td>";
+          "<td><input type=\"time\" name=\"" + key + "_OPEN\" value=\"" + entry.open + "\"></td>" +
+          "<td><input type=\"time\" name=\"" + key + "_CLOSE\" value=\"" + entry.close + "\"></td>";
         tbody.appendChild(tr);
       });
     }).catch(function (e) {
