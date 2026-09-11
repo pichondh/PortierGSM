@@ -43,6 +43,7 @@ public class SupervisionServer {
 
     private final ConfigReader configReader;
     private final SignalHistoryStore signalHistoryStore;
+    private final CallLogStore callLogStore;
     private final int port;
     private final String username;
     private final String password;
@@ -51,9 +52,10 @@ public class SupervisionServer {
     private HttpServer server;
 
     public SupervisionServer(ConfigReader configReader, SignalHistoryStore signalHistoryStore,
-                              int port, String username, String password) throws IOException {
+                              CallLogStore callLogStore, int port, String username, String password) throws IOException {
         this.configReader = configReader;
         this.signalHistoryStore = signalHistoryStore;
+        this.callLogStore = callLogStore;
         this.port = port;
         this.username = username;
         this.password = password;
@@ -89,6 +91,7 @@ public class SupervisionServer {
         addContext("/", this::handleDashboard, authenticator);
         addContext("/api/status", this::handleStatus, authenticator);
         addContext("/api/history", this::handleHistory, authenticator);
+        addContext("/api/calls", this::handleCalls, authenticator);
         addContext("/api/hours", this::handleHours, authenticator);
         addContext("/api/reboot", this::handleReboot, authenticator);
 
@@ -134,6 +137,8 @@ public class SupervisionServer {
         json.append("\"dbm\":").append(dbm == null ? "null" : dbm).append(",");
         json.append("\"quality\":\"").append(escapeJson(SignalHistoryStore.qualityLabel(lastCsq))).append("\",");
         json.append("\"lastUpdate\":").append(lastTs == null ? "null" : "\"" + lastTs + "\"").append(",");
+        json.append("\"buildNumber\":\"").append(escapeJson(BuildInfo.getBuildNumber())).append("\",");
+        json.append("\"projectVersion\":\"").append(escapeJson(BuildInfo.getProjectVersion())).append("\",");
 
         json.append("\"openingHours\":{");
         OpeningHours openingHours = configReader.getOpeningHours();
@@ -179,6 +184,37 @@ public class SupervisionServer {
             json.append("{\"ts\":\"").append(m.timestamp).append("\",\"csq\":").append(m.csq)
                     .append(",\"dbm\":").append(m.dbm == null ? "null" : m.dbm).append("}");
             if (i < measurements.size() - 1) json.append(",");
+        }
+        json.append("]}");
+        sendJson(exchange, 200, json.toString());
+    }
+
+    private void handleCalls(HttpExchange exchange) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendText(exchange, 405, "Méthode non autorisée");
+            return;
+        }
+        int limit = 20;
+        String query = exchange.getRequestURI().getQuery();
+        if (query != null) {
+            for (String param : query.split("&")) {
+                String[] kv = param.split("=", 2);
+                if (kv.length == 2 && kv[0].equals("limit")) {
+                    try {
+                        limit = Math.max(1, Math.min(200, Integer.parseInt(kv[1])));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        List<CallLogStore.CallEntry> calls = callLogStore.readRecent(limit);
+        StringBuilder json = new StringBuilder();
+        json.append("{\"calls\":[");
+        for (int i = 0; i < calls.size(); i++) {
+            CallLogStore.CallEntry c = calls.get(i);
+            json.append("{\"ts\":\"").append(c.timestamp).append("\",\"number\":\"")
+                    .append(escapeJson(c.phoneNumber)).append("\",\"accepted\":").append(c.accepted).append("}");
+            if (i < calls.size() - 1) json.append(",");
         }
         json.append("]}");
         sendJson(exchange, 200, json.toString());

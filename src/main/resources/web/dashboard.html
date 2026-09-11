@@ -115,11 +115,32 @@
   .status-msg.ok { color: var(--good); }
   .status-msg.error { color: var(--bad); }
   .reboot-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; }
+  .build-info { color: var(--muted); font-size: 0.8rem; margin: -10px 0 16px 0; }
+  table.calls { width: 100%; border-collapse: collapse; }
+  table.calls th, table.calls td {
+    padding: 6px 4px;
+    text-align: left;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+  table.calls th { color: var(--muted); font-weight: 500; }
+  .call-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .call-status.accepted { background: var(--good); }
+  .call-status.refused { background: var(--bad); }
+  .calls-empty { color: var(--muted); font-size: 0.85rem; padding: 10px 0; }
 </style>
 </head>
 <body>
 <div class="grid">
   <h1>Supervision PortierGSM</h1>
+  <div id="build-info" class="build-info">Version : --</div>
 
   <div class="card">
     <h2>Qualité du signal</h2>
@@ -135,12 +156,21 @@
   <div class="card">
     <h2>Historique du signal</h2>
     <div class="range-buttons">
-      <button data-days="1">24 h</button>
-      <button data-days="7" class="active">7 jours</button>
+      <button data-days="1" class="active">24 h</button>
+      <button data-days="7">7 jours</button>
       <button data-days="30">30 jours</button>
     </div>
     <canvas id="chart" width="640" height="160"></canvas>
     <div id="chart-empty" class="chart-empty" style="display:none">Pas encore assez de mesures.</div>
+  </div>
+
+  <div class="card">
+    <h2>Appels reçus</h2>
+    <table class="calls">
+      <thead><tr><th>Heure</th><th>Numéro</th><th>Statut</th></tr></thead>
+      <tbody id="calls-body"></tbody>
+    </table>
+    <div id="calls-empty" class="calls-empty" style="display:none">Aucun appel enregistré pour le moment.</div>
   </div>
 
   <div class="card">
@@ -191,6 +221,11 @@
       document.getElementById("signal-updated").textContent =
         "Dernière mesure : " + (data.lastUpdate ? formatTs(data.lastUpdate) : "aucune pour le moment");
 
+      var buildInfoEl = document.getElementById("build-info");
+      if (buildInfoEl) {
+        buildInfoEl.textContent = "Version : " + (data.projectVersion || "?") + " · build " + (data.buildNumber || "?");
+      }
+
       var tbody = document.getElementById("hours-body");
       tbody.innerHTML = "";
       DAYS.forEach(function (d) {
@@ -217,7 +252,7 @@
     }
   }
 
-  var currentDays = 7;
+  var currentDays = 1;
 
   function fetchHistory(days) {
     currentDays = days;
@@ -282,6 +317,38 @@
     ctx.fillText(lastLabel, canvas.width - padding - ctx.measureText(lastLabel).width, canvas.height - 4);
   }
 
+  function fetchCalls() {
+    fetch("/api/calls?limit=20").then(function (r) { return r.json(); }).then(function (data) {
+      var calls = data.calls || [];
+      var tbody = document.getElementById("calls-body");
+      var emptyMsg = document.getElementById("calls-empty");
+      tbody.innerHTML = "";
+      if (!calls.length) {
+        emptyMsg.style.display = "block";
+        return;
+      }
+      emptyMsg.style.display = "none";
+      calls.forEach(function (c) {
+        var tr = document.createElement("tr");
+        var statusClass = c.accepted ? "accepted" : "refused";
+        var statusLabel = c.accepted ? "Ouvert" : "Refusé (fermé)";
+        tr.innerHTML =
+          "<td>" + formatTs(c.ts) + "</td>" +
+          "<td>" + escapeHtml(c.number) + "</td>" +
+          "<td><span class=\"call-status " + statusClass + "\">" + statusLabel + "</span></td>";
+        tbody.appendChild(tr);
+      });
+    }).catch(function (e) {
+      console.error("Erreur /api/calls", e);
+    });
+  }
+
+  function escapeHtml(value) {
+    var div = document.createElement("div");
+    div.textContent = value == null ? "" : value;
+    return div.innerHTML;
+  }
+
   document.querySelectorAll(".range-buttons button").forEach(function (btn) {
     btn.addEventListener("click", function () {
       fetchHistory(parseInt(btn.getAttribute("data-days"), 10));
@@ -340,7 +407,9 @@
 
   fetchStatus();
   fetchHistory(currentDays);
+  fetchCalls();
   setInterval(fetchStatus, 30000);
+  setInterval(fetchCalls, 30000);
 </script>
 </body>
 </html>

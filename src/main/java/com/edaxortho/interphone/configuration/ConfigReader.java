@@ -34,6 +34,7 @@ public class ConfigReader {
     private String WEB_USERNAME;
     private String WEB_PASSWORD;
     private Integer SIGNAL_HISTORY_RETENTION_DAYS;
+    private Integer CALL_LOG_RETENTION_DAYS;
 
     // Chemin absolu du config.properties effectivement chargé (résolu dans
     // init()), pour permettre une réécriture ciblée depuis la page de
@@ -98,6 +99,11 @@ public class ConfigReader {
                 SIGNAL_HISTORY_RETENTION_DAYS = Integer.parseInt(prop.getProperty("SIGNAL_HISTORY_RETENTION_DAYS", "30").trim());
             } catch (NumberFormatException e) {
                 SIGNAL_HISTORY_RETENTION_DAYS = 30;
+            }
+            try {
+                CALL_LOG_RETENTION_DAYS = Integer.parseInt(prop.getProperty("CALL_LOG_RETENTION_DAYS", "30").trim());
+            } catch (NumberFormatException e) {
+                CALL_LOG_RETENTION_DAYS = 30;
             }
             LOGGER.info("WEB_PORT = {}, WEB_USERNAME = {}", WEB_PORT, WEB_USERNAME);
 
@@ -191,6 +197,10 @@ public class ConfigReader {
 
     public Integer getSIGNAL_HISTORY_RETENTION_DAYS() {
         return SIGNAL_HISTORY_RETENTION_DAYS;
+    }
+
+    public Integer getCALL_LOG_RETENTION_DAYS() {
+        return CALL_LOG_RETENTION_DAYS;
     }
 
     public String getConfPath() {

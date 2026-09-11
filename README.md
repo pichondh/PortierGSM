@@ -121,11 +121,29 @@ la ligne ci-dessus en conséquence). Sans cette règle, un clic sur le bouton
 échoue silencieusement côté serveur (erreur loguée) sans planter le reste de
 l'application.
 
-**Non testé sur le matériel réel à ce jour** (implémenté le 11/09/2026,
-vérifié uniquement par compilation) : à tester en conditions réelles avant
-de compter dessus — accès à la page depuis un téléphone sur le Wi-Fi de la
-maison, sauvegarde des horaires, et redémarrage (après avoir configuré le
-sudoers ci-dessus).
+**Testé en conditions réelles le 11/09/2026** : accès depuis un téléphone,
+consultation/modification des horaires, tout fonctionne. Un bug bloquant
+initial (erreur d'échappement dans le JS embarqué de `dashboard.html`, qui
+cassait toute la page) a été identifié et corrigé après ce premier test.
+
+**Fonctionnalités additionnelles (11/09/2026)** :
+
+- **Numéro de build affiché sur la page** (sous le titre, ex: "Version :
+  0.2.0 · build 20260911220532") : généré automatiquement par Gradle à
+  chaque build (`generateBuildInfo` dans `build.gradle`, résultat dans
+  `build-info.properties`, lu par `BuildInfo.java`). Permet de vérifier en
+  un coup d'œil quel code tourne réellement sur la Pi, et d'éviter les
+  confusions type "j'ai redéployé mais c'est toujours l'ancien code" (ce qui
+  est justement arrivé lors du premier test).
+- **Journal des appels reçus** : encart listant les derniers appels (heure,
+  numéro appelant si disponible via `+CLIP`, "Ouvert" ou "Refusé (fermé)"
+  selon que l'horaire d'ouverture était respecté). Persisté dans
+  `conf/call_log.csv` (même principe que l'historique du signal), purgé au
+  bout de `CALL_LOG_RETENTION_DAYS` jours (30 par défaut). Utile pour
+  diagnostiquer les jours où "le déclenchement fonctionne mal" : permet de
+  voir si un appel a bien été reçu et pourquoi il n'a pas ouvert (hors
+  horaires) sans avoir à éplucher les logs de l'appli.
+- **Période d'historique du signal par défaut : 24h** (au lieu de 7 jours).
 
 Lancement du programme au démarrage du RPI
 /etc/rc.local

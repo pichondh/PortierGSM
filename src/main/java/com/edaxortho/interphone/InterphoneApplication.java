@@ -7,6 +7,7 @@ import com.edaxortho.interphone.serial.SerialPortier;
 import com.edaxortho.interphone.serial.SerialPower;
 import com.edaxortho.interphone.util.OpeningHoursUtil;
 import com.edaxortho.interphone.util.SerialUtil;
+import com.edaxortho.interphone.web.CallLogStore;
 import com.edaxortho.interphone.web.SignalHistoryStore;
 import com.edaxortho.interphone.web.SupervisionServer;
 import com.edaxortho.marytts.PortierSpeech;
@@ -62,8 +63,10 @@ public class InterphoneApplication {
             File confFile = new File(configReader.getConfPath());
             String historyPath = new File(confFile.getParentFile(), "signal_history.csv").getAbsolutePath();
             SignalHistoryStore signalHistoryStore = new SignalHistoryStore(historyPath, configReader.getSIGNAL_HISTORY_RETENTION_DAYS());
+            String callLogPath = new File(confFile.getParentFile(), "call_log.csv").getAbsolutePath();
+            CallLogStore callLogStore = new CallLogStore(callLogPath, configReader.getCALL_LOG_RETENTION_DAYS());
             try {
-                SupervisionServer supervisionServer = new SupervisionServer(configReader, signalHistoryStore,
+                SupervisionServer supervisionServer = new SupervisionServer(configReader, signalHistoryStore, callLogStore,
                         configReader.getWEB_PORT(), configReader.getWEB_USERNAME(), configReader.getWEB_PASSWORD());
                 supervisionServer.start();
                 LOGGER.info("Page de supervision démarrée sur le port {}", configReader.getWEB_PORT());
@@ -121,7 +124,9 @@ public class InterphoneApplication {
                 if (msg != null) {
                     if (msg.contains("RING")) {
                         SerialPortier serialPortier = new SerialPortier(port, serialUtil);
-                        if (openingHoursUtil.isOpen(configReader.getOpeningHours(), LocalDateTime.now())) {
+                        String callerNumber = CallLogStore.parsePhoneNumber(msg);
+                        boolean isOpen = openingHoursUtil.isOpen(configReader.getOpeningHours(), LocalDateTime.now());
+                        if (isOpen) {
                             LOGGER.info("ON DECROCHE !!!!");
                             serialPortier.decrocheEtoileRaccroche(true);
                         } else {
@@ -131,6 +136,8 @@ public class InterphoneApplication {
                                 serialPortier.decrocheEtoileRaccroche(false);
                             }
                         }
+                        callLogStore.record(callerNumber, isOpen);
+                        LOGGER.info("Appel de {} {} (journalisé)", callerNumber, isOpen ? "accepté" : "refusé (fermé)");
                     } else {
                         LOGGER.info(">>> {}", msg);
                     }

@@ -28,6 +28,7 @@ WEB_PORT=8081
 WEB_USERNAME=admin
 WEB_PASSWORD=test
 SIGNAL_HISTORY_RETENTION_DAYS=30
+CALL_LOG_RETENTION_DAYS=30
 
 # Horaires larges pour que decrocheEtoileRaccroche(true) soit teste
 # quelle que soit l'heure a laquelle vous testez.

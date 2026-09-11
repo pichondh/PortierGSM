@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.edaxortho'
-version = '0.1.1'
+version = '0.2.0'
 sourceCompatibility = '11'
 mainClassName = 'com.edaxortho.interphone.InterphoneApplication'
 
@@ -37,3 +37,30 @@ dependencies {
 //	}
 //	implementation group: 'javazoom', name: 'jlayer', version: '1.0.1'
 }
+
+// Numero de build (horodatage genere a chaque build) affiche sur la page de
+// supervision web, pour verifier facilement quelle version du code tourne
+// reellement sur la Pi (voir com.edaxortho.interphone.web.BuildInfo).
+def buildTimestamp = new Date().format("yyyyMMddHHmmss")
+
+sourceSets {
+	main {
+		resources {
+			srcDir "$buildDir/generated/resources"
+		}
+	}
+}
+
+task generateBuildInfo {
+	def outputDir = file("$buildDir/generated/resources")
+	outputs.dir(outputDir)
+	doLast {
+		outputDir.mkdirs()
+		new File(outputDir, "build-info.properties").text =
+				"BUILD_NUMBER=${buildTimestamp}\n" +
+				"PROJECT_VERSION=${project.version}\n"
+	}
+}
+
+processResources.dependsOn generateBuildInfo
+
