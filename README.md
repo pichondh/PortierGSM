@@ -72,6 +72,61 @@ Points d'attention liés au module actuellement utilisé (SIM7600E-H) :
   HAT sur `PWR`-`D6`, puis décommenter le script en remplaçant le pin GPIO4
   par le bon pin BOARD pour **GPIO6**.
 
+## Page de supervision web
+
+Une petite page web embarquée (servie directement par l'application Java,
+sans dépendance externe : `com.sun.net.httpserver` du JDK) permet de
+surveiller et piloter le portier depuis un navigateur, en réseau local :
+
+- Qualité du signal GSM actuelle (CSQ + dBm) et historique (24h/7j/30j),
+  mesuré à chaque test de signal déjà effectué par l'application (~1x/min).
+- Consultation et modification des horaires d'ouverture (écrit directement
+  dans `config.properties`, pris en compte immédiatement sans redémarrage).
+- Bouton de redémarrage complet de la Raspberry Pi.
+
+**Accès** : `http://<ip-de-la-pi>:8080` (port configurable via `WEB_PORT`
+dans `config.properties`), protégé par une authentification HTTP Basic
+(`WEB_USERNAME` / `WEB_PASSWORD`). ⚠️ Pensée pour un usage réseau local
+uniquement : pas de HTTPS, à ne surtout pas exposer directement sur Internet
+(pas de redirection de port sur la box). **Changez `WEB_PASSWORD`** dans
+`config.properties` avant la mise en prod — la valeur par défaut du dépôt
+(`changeme`) n'est qu'un exemple et déclenche un avertissement dans les logs
+tant qu'elle n'a pas été changée.
+
+**Configuration requise (`config.properties`)** :
+```
+WEB_PORT=8080
+WEB_USERNAME=admin
+WEB_PASSWORD=<un mot de passe à vous, pas "changeme">
+SIGNAL_HISTORY_RETENTION_DAYS=30
+```
+
+**Historique du signal** : stocké dans un simple fichier CSV
+(`conf/signal_history.csv`, à côté de `config.properties`), purgé
+automatiquement au-delà de `SIGNAL_HISTORY_RETENTION_DAYS` jours. Pas de
+base de données : le volume est faible (une ligne par minute environ) et un
+fichier texte reste facile à inspecter à la main en cas de souci.
+
+**Bouton "Redémarrer la Raspberry Pi"** : exécute `sudo reboot` depuis
+l'application. Comme celle-ci tourne sous l'utilisateur `pi` (pas root), il
+faut autoriser ce *seul* utilisateur à exécuter *seulement* cette commande
+sans mot de passe. Sur la Pi, en root ou via `sudo visudo` :
+```
+# /etc/sudoers.d/portiergsm-reboot
+pi ALL=(root) NOPASSWD: /sbin/reboot
+```
+(vérifier le chemin exact avec `which reboot` sur votre Pi — c'est en
+général `/sbin/reboot` ou `/usr/sbin/reboot` sur Raspberry Pi OS ; ajuster
+la ligne ci-dessus en conséquence). Sans cette règle, un clic sur le bouton
+échoue silencieusement côté serveur (erreur loguée) sans planter le reste de
+l'application.
+
+**Non testé sur le matériel réel à ce jour** (implémenté le 11/09/2026,
+vérifié uniquement par compilation) : à tester en conditions réelles avant
+de compter dessus — accès à la page depuis un téléphone sur le Wi-Fi de la
+maison, sauvegarde des horaires, et redémarrage (après avoir configuré le
+sudoers ci-dessus).
+
 Lancement du programme au démarrage du RPI
 /etc/rc.local
 /home/pi/PortierGSM/bin/PortierGSM

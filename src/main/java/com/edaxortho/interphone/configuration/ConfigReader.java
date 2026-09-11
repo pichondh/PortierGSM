@@ -9,6 +9,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 public class ConfigReader {
@@ -23,7 +28,22 @@ public class ConfigReader {
     private Boolean SYNTHESE_VOCALE;
     private String TEXTE_FERMETURE;
 
-    private OpeningHours openingHours;
+    // Page de supervision web (qualité du signal + historique, horaires
+    // d'ouverture, redémarrage). Voir com.edaxortho.interphone.web.
+    private Integer WEB_PORT;
+    private String WEB_USERNAME;
+    private String WEB_PASSWORD;
+    private Integer SIGNAL_HISTORY_RETENTION_DAYS;
+
+    // Chemin absolu du config.properties effectivement chargé (résolu dans
+    // init()), pour permettre une réécriture ciblée depuis la page de
+    // supervision (mise à jour des horaires d'ouverture).
+    private String confPath;
+
+    // Rechargé en mémoire par updateOpeningHours() depuis un autre thread
+    // (le serveur HTTP de supervision) pendant que la boucle principale le
+    // lit ; volatile pour garantir la visibilité entre threads.
+    private volatile OpeningHours openingHours;
 
     public void init() {
         Properties prop = new Properties();
@@ -34,7 +54,7 @@ public class ConfigReader {
             File jarFile = new File(jarPath);
             File parentDir = jarFile.getParentFile();
 
-            String confPath = parentDir.getAbsolutePath() + "/../conf/config.properties";
+            confPath = parentDir.getAbsolutePath() + "/../conf/config.properties";
             LOGGER.info("Chemin de recherche du fichier config : {}", confPath);
             input = new FileInputStream(confPath);
 
@@ -62,6 +82,24 @@ public class ConfigReader {
 
             POWER_SCRIPT = prop.getProperty("POWER_SCRIPT");
             LOGGER.info("POWER_SCRIPT = " + POWER_SCRIPT);
+
+            try {
+                WEB_PORT = Integer.parseInt(prop.getProperty("WEB_PORT", "8080").trim());
+            } catch (NumberFormatException e) {
+                LOGGER.warn("WEB_PORT invalide dans config.properties, utilisation de 8080 par défaut.");
+                WEB_PORT = 8080;
+            }
+            WEB_USERNAME = prop.getProperty("WEB_USERNAME", "admin");
+            WEB_PASSWORD = prop.getProperty("WEB_PASSWORD", "");
+            if (WEB_PASSWORD == null || WEB_PASSWORD.isEmpty()) {
+                LOGGER.warn("WEB_PASSWORD non défini dans config.properties : la page de supervision sera inaccessible tant qu'un mot de passe n'est pas configuré.");
+            }
+            try {
+                SIGNAL_HISTORY_RETENTION_DAYS = Integer.parseInt(prop.getProperty("SIGNAL_HISTORY_RETENTION_DAYS", "30").trim());
+            } catch (NumberFormatException e) {
+                SIGNAL_HISTORY_RETENTION_DAYS = 30;
+            }
+            LOGGER.info("WEB_PORT = {}, WEB_USERNAME = {}", WEB_PORT, WEB_USERNAME);
 
             SYNTHESE_VOCALE = Boolean.parseBoolean(prop.getProperty("SYNTHESE_VOCALE"));
             TEXTE_FERMETURE = prop.getProperty("TEXTE_FERMETURE");
@@ -137,5 +175,63 @@ public class ConfigReader {
 
     public Boolean getSYNTHESE_VOCALE() {
         return SYNTHESE_VOCALE;
+    }
+
+    public Integer getWEB_PORT() {
+        return WEB_PORT;
+    }
+
+    public String getWEB_USERNAME() {
+        return WEB_USERNAME;
+    }
+
+    public String getWEB_PASSWORD() {
+        return WEB_PASSWORD;
+    }
+
+    public Integer getSIGNAL_HISTORY_RETENTION_DAYS() {
+        return SIGNAL_HISTORY_RETENTION_DAYS;
+    }
+
+    public String getConfPath() {
+        return confPath;
+    }
+
+    /**
+     * Met à jour les horaires d'ouverture dans config.properties (clés
+     * <JOUR>_OPEN / <JOUR>_CLOSE, ex: MONDAY_OPEN) et recharge toute la
+     * configuration en mémoire. Ne modifie que ces lignes précises, en
+     * préservant le reste du fichier (commentaires, ordre, autres clés)
+     * plutôt que d'utiliser Properties.store() qui réécrirait tout le
+     * fichier sans ses commentaires.
+     *
+     * @param hoursByDay clé = jour en anglais majuscules (ex: "MONDAY"),
+     *                   valeur = tableau [heureOuverture, heureFermeture]
+     *                   au format "HH:mm"
+     */
+    public synchronized void updateOpeningHours(Map<String, String[]> hoursByDay) throws IOException {
+        if (confPath == null) {
+            throw new IOException("config.properties non initialisé (init() jamais appelé avec succès)");
+        }
+        List<String> lines = Files.readAllLines(Paths.get(confPath), StandardCharsets.UTF_8);
+        List<String> result = new java.util.ArrayList<>(lines.size());
+        for (String line : lines) {
+            String replaced = line;
+            for (Map.Entry<String, String[]> entry : hoursByDay.entrySet()) {
+                String openKey = entry.getKey() + "_OPEN";
+                String closeKey = entry.getKey() + "_CLOSE";
+                if (line.startsWith(openKey + "=")) {
+                    replaced = openKey + "=" + entry.getValue()[0];
+                    break;
+                } else if (line.startsWith(closeKey + "=")) {
+                    replaced = closeKey + "=" + entry.getValue()[1];
+                    break;
+                }
+            }
+            result.add(replaced);
+        }
+        Files.write(Paths.get(confPath), result, StandardCharsets.UTF_8);
+        LOGGER.info("Horaires d'ouverture réécrits dans {}", confPath);
+        init();
     }
 }

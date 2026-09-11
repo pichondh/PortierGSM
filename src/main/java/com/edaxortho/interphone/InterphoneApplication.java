@@ -7,11 +7,14 @@ import com.edaxortho.interphone.serial.SerialPortier;
 import com.edaxortho.interphone.serial.SerialPower;
 import com.edaxortho.interphone.util.OpeningHoursUtil;
 import com.edaxortho.interphone.util.SerialUtil;
+import com.edaxortho.interphone.web.SignalHistoryStore;
+import com.edaxortho.interphone.web.SupervisionServer;
 import com.edaxortho.marytts.PortierSpeech;
 import com.fazecast.jSerialComm.SerialPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
@@ -50,6 +53,23 @@ public class InterphoneApplication {
             System.out.println("Port série ouvert avec succès");
             port.addDataListener(serialPortReader);
             SerialUtil serialUtil = new SerialUtil(port);
+
+            // Historique de signal + page de supervision web (qualité du signal,
+            // horaires d'ouverture, redémarrage de la Pi). Fichier d'historique
+            // stocké à côté de config.properties. Un échec de démarrage du
+            // serveur web n'empêche pas le portier de fonctionner : on logue
+            // l'erreur et on continue sans page de supervision.
+            File confFile = new File(configReader.getConfPath());
+            String historyPath = new File(confFile.getParentFile(), "signal_history.csv").getAbsolutePath();
+            SignalHistoryStore signalHistoryStore = new SignalHistoryStore(historyPath, configReader.getSIGNAL_HISTORY_RETENTION_DAYS());
+            try {
+                SupervisionServer supervisionServer = new SupervisionServer(configReader, signalHistoryStore,
+                        configReader.getWEB_PORT(), configReader.getWEB_USERNAME(), configReader.getWEB_PASSWORD());
+                supervisionServer.start();
+                LOGGER.info("Page de supervision démarrée sur le port {}", configReader.getWEB_PORT());
+            } catch (IOException e) {
+                LOGGER.error("Impossible de démarrer la page de supervision web : {}", e.getMessage(), e);
+            }
 
             serialUtil.sendCommand("AT\r\n");
             Thread.sleep(1000);
@@ -123,6 +143,12 @@ public class InterphoneApplication {
                     Thread.sleep(1000);
                     String signalTestResponse = serialPortReader.getLastMessage();
                     LOGGER.info("Signal : {}", signalTestResponse);
+                    Integer csqValue = SignalHistoryStore.parseCsq(signalTestResponse);
+                    if (csqValue != null) {
+                        signalHistoryStore.record(csqValue);
+                    } else {
+                        LOGGER.warn("Réponse AT+CSQ inattendue, mesure non enregistrée dans l'historique : {}", signalTestResponse);
+                    }
                 } else {
                     Thread.sleep(1000);
                 }

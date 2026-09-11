@@ -22,6 +22,13 @@ CODE_PIN=0000
 # de suite a AT), la valeur n'a donc pas d'importance pour ce test.
 POWER_SCRIPT=dummy
 
+# Page de supervision web : port different du 8080 par defaut pour ne pas
+# entrer en conflit avec une eventuelle instance de prod sur la meme machine.
+WEB_PORT=8081
+WEB_USERNAME=admin
+WEB_PASSWORD=test
+SIGNAL_HISTORY_RETENTION_DAYS=30
+
 # Horaires larges pour que decrocheEtoileRaccroche(true) soit teste
 # quelle que soit l'heure a laquelle vous testez.
 MONDAY_OPEN=00:00
