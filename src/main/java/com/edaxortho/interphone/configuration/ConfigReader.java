@@ -36,6 +36,23 @@ public class ConfigReader {
     private Integer SIGNAL_HISTORY_RETENTION_DAYS;
     private Integer CALL_LOG_RETENTION_DAYS;
 
+    // Watchdog logiciel (voir InterphoneApplication) : nombre de tests de
+    // signal (AT+CSQ) consécutifs sans réponse exploitable du module avant
+    // de considérer qu'il est figé/muet et de déclencher un redémarrage
+    // automatique de la Raspberry Pi. Ajouté suite à un incident du
+    // 12/09/2026 où le module SIM7600E-H a cessé de répondre à toute
+    // commande AT pendant plus de 5h (donc plus aucun appel entrant
+    // détecté) sans que l'application elle-même ne plante ni ne s'en
+    // aperçoive : seul un redémarrage manuel via la page de supervision a
+    // résolu le problème.
+    private Integer WATCHDOG_MAX_FAILURES;
+
+    // Intervalle (en minutes) entre deux purges préventives de la mémoire
+    // SMS du module (AT+CMGD=1,4). Une mémoire pleine (notification
+    // "+SMS FULL" observée régulièrement dans les logs) est un suspect
+    // plausible de désynchronisation du dialogue AT avec le module.
+    private Integer SMS_PURGE_INTERVAL_MINUTES;
+
     // Chemin absolu du config.properties effectivement chargé (résolu dans
     // init()), pour permettre une réécriture ciblée depuis la page de
     // supervision (mise à jour des horaires d'ouverture).
@@ -105,7 +122,20 @@ public class ConfigReader {
             } catch (NumberFormatException e) {
                 CALL_LOG_RETENTION_DAYS = 30;
             }
+            try {
+                WATCHDOG_MAX_FAILURES = Integer.parseInt(prop.getProperty("WATCHDOG_MAX_FAILURES", "3").trim());
+            } catch (NumberFormatException e) {
+                LOGGER.warn("WATCHDOG_MAX_FAILURES invalide dans config.properties, utilisation de 3 par défaut.");
+                WATCHDOG_MAX_FAILURES = 3;
+            }
+            try {
+                SMS_PURGE_INTERVAL_MINUTES = Integer.parseInt(prop.getProperty("SMS_PURGE_INTERVAL_MINUTES", "60").trim());
+            } catch (NumberFormatException e) {
+                LOGGER.warn("SMS_PURGE_INTERVAL_MINUTES invalide dans config.properties, utilisation de 60 par défaut.");
+                SMS_PURGE_INTERVAL_MINUTES = 60;
+            }
             LOGGER.info("WEB_PORT = {}, WEB_USERNAME = {}", WEB_PORT, WEB_USERNAME);
+            LOGGER.info("WATCHDOG_MAX_FAILURES = {}, SMS_PURGE_INTERVAL_MINUTES = {}", WATCHDOG_MAX_FAILURES, SMS_PURGE_INTERVAL_MINUTES);
 
             SYNTHESE_VOCALE = Boolean.parseBoolean(prop.getProperty("SYNTHESE_VOCALE"));
             TEXTE_FERMETURE = prop.getProperty("TEXTE_FERMETURE");
@@ -201,6 +231,14 @@ public class ConfigReader {
 
     public Integer getCALL_LOG_RETENTION_DAYS() {
         return CALL_LOG_RETENTION_DAYS;
+    }
+
+    public Integer getWATCHDOG_MAX_FAILURES() {
+        return WATCHDOG_MAX_FAILURES;
+    }
+
+    public Integer getSMS_PURGE_INTERVAL_MINUTES() {
+        return SMS_PURGE_INTERVAL_MINUTES;
     }
 
     public String getConfPath() {

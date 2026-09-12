@@ -119,6 +119,29 @@ public class InterphoneApplication {
             Thread.sleep(1000);
 
             int signalTest = 60;
+
+            // Watchdog (ajouté suite à l'incident du 12/09/2026) : le module
+            // SIM7600E-H a cessé de répondre à toute commande AT pendant plus
+            // de 5h, sans que le process Java ne plante ni ne le remarque -
+            // la boucle continuait de tourner normalement (donc "l'appli
+            // semblait fonctionner") pendant que le module, lui, était muet
+            // et ne signalait plus aucun appel entrant. On compte les échecs
+            // consécutifs du test de signal (AT+CSQ sans réponse exploitable)
+            // et, au-delà de WATCHDOG_MAX_FAILURES, on déclenche un
+            // redémarrage complet de la Raspberry Pi - la seule action qui a
+            // résolu l'incident (via le bouton de la page de supervision).
+            int consecutiveSignalFailures = 0;
+            boolean watchdogRebootTriggered = false;
+
+            // Purge préventive périodique de la mémoire SMS du module
+            // (AT+CMGD=1,4). Une notification non sollicitée "+SMS FULL" a
+            // été observée à plusieurs reprises dans les logs, y compris peu
+            // avant l'incident du 12/09/2026 ; une mémoire SMS pleine est un
+            // suspect plausible de désynchronisation du dialogue AT avec le
+            // module. L'application n'utilise pas les SMS : purger sans
+            // condition ne perd aucune donnée utile.
+            int smsPurgeCountdownSeconds = configReader.getSMS_PURGE_INTERVAL_MINUTES() * 60;
+
             while (true) {
                 String msg = serialPortReader.getLastMessage();
                 if (msg != null) {
@@ -153,10 +176,34 @@ public class InterphoneApplication {
                     Integer csqValue = SignalHistoryStore.parseCsq(signalTestResponse);
                     if (csqValue != null) {
                         signalHistoryStore.record(csqValue);
+                        if (consecutiveSignalFailures > 0) {
+                            LOGGER.info("Le module répond de nouveau normalement après {} échec(s) consécutif(s).", consecutiveSignalFailures);
+                        }
+                        consecutiveSignalFailures = 0;
                     } else {
-                        LOGGER.warn("Réponse AT+CSQ inattendue, mesure non enregistrée dans l'historique : {}", signalTestResponse);
+                        consecutiveSignalFailures++;
+                        LOGGER.warn("Réponse AT+CSQ inattendue, mesure non enregistrée dans l'historique ({}/{} échecs consécutifs) : {}",
+                                consecutiveSignalFailures, configReader.getWATCHDOG_MAX_FAILURES(), signalTestResponse);
+                        if (!watchdogRebootTriggered && consecutiveSignalFailures >= configReader.getWATCHDOG_MAX_FAILURES()) {
+                            watchdogRebootTriggered = true;
+                            LOGGER.error("WATCHDOG : le module GSM ne répond plus depuis {} tentatives consécutives (~{} min). Redémarrage automatique de la Raspberry Pi.",
+                                    consecutiveSignalFailures, consecutiveSignalFailures);
+                            try {
+                                new ProcessBuilder("sudo", "reboot").start();
+                            } catch (IOException e) {
+                                LOGGER.error("WATCHDOG : impossible de déclencher le redémarrage automatique (sudoers configuré ? cf README) : {}", e.getMessage(), e);
+                            }
+                        }
                     }
                 } else {
+                    Thread.sleep(1000);
+                }
+
+                smsPurgeCountdownSeconds--;
+                if (smsPurgeCountdownSeconds <= 0) {
+                    smsPurgeCountdownSeconds = configReader.getSMS_PURGE_INTERVAL_MINUTES() * 60;
+                    LOGGER.info("Purge périodique de la mémoire SMS du module (AT+CMGD=1,4)...");
+                    serialUtil.sendCommand("AT+CMGD=1,4\r\n");
                     Thread.sleep(1000);
                 }
             }

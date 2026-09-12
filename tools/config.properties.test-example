@@ -30,6 +30,12 @@ WEB_PASSWORD=test
 SIGNAL_HISTORY_RETENTION_DAYS=30
 CALL_LOG_RETENTION_DAYS=30
 
+# Watchdog / purge SMS : valeurs sans incidence sur ce test (le faux modem
+# repond toujours a AT+CSQ, jamais de "+SMS FULL"), presentes uniquement
+# pour que le fichier reste un exemple complet et a jour.
+WATCHDOG_MAX_FAILURES=3
+SMS_PURGE_INTERVAL_MINUTES=60
+
 # Horaires larges pour que decrocheEtoileRaccroche(true) soit teste
 # quelle que soit l'heure a laquelle vous testez.
 MONDAY_OPEN=00:00

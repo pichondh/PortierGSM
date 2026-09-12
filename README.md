@@ -145,6 +145,52 @@ cassait toute la page) a été identifié et corrigé après ce premier test.
   horaires) sans avoir à éplucher les logs de l'appli.
 - **Période d'historique du signal par défaut : 24h** (au lieu de 7 jours).
 
+## Watchdog et purge SMS (12/09/2026)
+
+**Incident réel** : le 12/09/2026 à 16h20, le module SIM7600E-H a cessé de
+répondre à **toute** commande AT (plus seulement AT+CSQ) pendant plus de 5
+heures, sans qu'aucune exception ne soit levée côté Java. La boucle
+principale a continué de tourner normalement (un test de signal par
+minute, en échec silencieux), ce qui donnait l'impression que
+l'application fonctionnait alors qu'elle n'entendait plus rien du tout,
+y compris un appel entrant réel (RING) qui a sonné dans le vide. Seul un
+redémarrage manuel de la Raspberry Pi via le bouton de la page de
+supervision a résolu le problème, immédiatement.
+
+Diagnostic tiré des logs : à `16:20:59`, le dernier test de signal réussit
+normalement ; dès `16:21:00`, chaque tentative suivante (une par minute)
+reçoit une réponse `null` (aucune donnée du port série), et ce sans
+interruption jusqu'au redémarrage manuel à `21:30`. Environ 10 minutes
+avant le blocage, une notification non sollicitée `+SMS FULL` (mémoire SMS
+de la carte pleine) est arrivée en plein milieu d'un échange AT — suspect
+plausible d'une désynchronisation du dialogue avec le module, sans
+certitude absolue sur la cause exacte du blocage.
+
+Deux mesures ont été ajoutées suite à cet incident, pour ne plus dépendre
+d'un humain qui doit remarquer le problème et cliquer sur "redémarrer" :
+
+- **Watchdog automatique** : la boucle principale compte les échecs
+  consécutifs du test de signal (AT+CSQ sans réponse exploitable). Au bout
+  de `WATCHDOG_MAX_FAILURES` échecs consécutifs (3 par défaut, donc ~3
+  minutes au lieu de 5h), elle déclenche elle-même `sudo reboot` — la même
+  action que le bouton de la page de supervision, avec les mêmes
+  prérequis `sudoers` (voir plus haut). Un redémarrage automatique n'est
+  déclenché qu'une seule fois par blocage (pas de boucle de redémarrages).
+  Le module utilisé (SIM7600E-H) est prévu pour redémarrer automatiquement
+  à la mise sous tension ; on ne dépend donc pas d'un script d'alimentation
+  GPIO propre à l'ancien module pour la relance.
+- **Purge préventive de la mémoire SMS** : toutes les
+  `SMS_PURGE_INTERVAL_MINUTES` minutes (60 par défaut), l'application
+  envoie `AT+CMGD=1,4` (suppression de tous les SMS). L'application
+  n'utilisant pas les SMS, cette purge ne perd aucune donnée utile et vise
+  à éviter la notification `+SMS FULL` observée avant l'incident.
+
+**Configuration (`config.properties`)** :
+```
+WATCHDOG_MAX_FAILURES=3
+SMS_PURGE_INTERVAL_MINUTES=60
+```
+
 Lancement du programme au démarrage du RPI
 /etc/rc.local
 /home/pi/PortierGSM/bin/PortierGSM
