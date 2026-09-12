@@ -34,6 +34,7 @@ CALL_LOG_RETENTION_DAYS=30
 # repond toujours a AT+CSQ, jamais de "+SMS FULL"), presentes uniquement
 # pour que le fichier reste un exemple complet et a jour.
 WATCHDOG_MAX_FAILURES=3
+WATCHDOG_INCIDENT_RETENTION_DAYS=90
 SMS_PURGE_INTERVAL_MINUTES=60
 
 # Horaires larges pour que decrocheEtoileRaccroche(true) soit teste

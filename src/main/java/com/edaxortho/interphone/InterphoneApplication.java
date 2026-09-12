@@ -5,11 +5,14 @@ import com.edaxortho.interphone.configuration.ConfigReader;
 import com.edaxortho.interphone.serial.SerialPortReader;
 import com.edaxortho.interphone.serial.SerialPortier;
 import com.edaxortho.interphone.serial.SerialPower;
+import com.edaxortho.interphone.util.NetworkStatusUtil;
 import com.edaxortho.interphone.util.OpeningHoursUtil;
 import com.edaxortho.interphone.util.SerialUtil;
+import com.edaxortho.interphone.watchdog.SignalWatchdog;
 import com.edaxortho.interphone.web.CallLogStore;
 import com.edaxortho.interphone.web.SignalHistoryStore;
 import com.edaxortho.interphone.web.SupervisionServer;
+import com.edaxortho.interphone.web.WatchdogIncidentStore;
 import com.edaxortho.marytts.PortierSpeech;
 import com.fazecast.jSerialComm.SerialPort;
 import org.slf4j.Logger;
@@ -17,6 +20,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 
 public class InterphoneApplication {
@@ -56,8 +61,8 @@ public class InterphoneApplication {
             SerialUtil serialUtil = new SerialUtil(port);
 
             // Historique de signal + page de supervision web (qualité du signal,
-            // horaires d'ouverture, redémarrage de la Pi). Fichier d'historique
-            // stocké à côté de config.properties. Un échec de démarrage du
+            // horaires d'ouverture, redémarrage de la Pi). Fichiers d'historique
+            // stockés à côté de config.properties. Un échec de démarrage du
             // serveur web n'empêche pas le portier de fonctionner : on logue
             // l'erreur et on continue sans page de supervision.
             File confFile = new File(configReader.getConfPath());
@@ -65,8 +70,13 @@ public class InterphoneApplication {
             SignalHistoryStore signalHistoryStore = new SignalHistoryStore(historyPath, configReader.getSIGNAL_HISTORY_RETENTION_DAYS());
             String callLogPath = new File(confFile.getParentFile(), "call_log.csv").getAbsolutePath();
             CallLogStore callLogStore = new CallLogStore(callLogPath, configReader.getCALL_LOG_RETENTION_DAYS());
+            String watchdogIncidentsPath = new File(confFile.getParentFile(), "watchdog_incidents.csv").getAbsolutePath();
+            WatchdogIncidentStore watchdogIncidentStore = new WatchdogIncidentStore(watchdogIncidentsPath, configReader.getWATCHDOG_INCIDENT_RETENTION_DAYS());
+            File heartbeatFile = new File(confFile.getParentFile(), "heartbeat.txt");
+
+            SupervisionServer supervisionServer = null;
             try {
-                SupervisionServer supervisionServer = new SupervisionServer(configReader, signalHistoryStore, callLogStore,
+                supervisionServer = new SupervisionServer(configReader, signalHistoryStore, callLogStore, watchdogIncidentStore,
                         configReader.getWEB_PORT(), configReader.getWEB_USERNAME(), configReader.getWEB_PASSWORD());
                 supervisionServer.start();
                 LOGGER.info("Page de supervision démarrée sur le port {}", configReader.getWEB_PORT());
@@ -125,13 +135,11 @@ public class InterphoneApplication {
             // de 5h, sans que le process Java ne plante ni ne le remarque -
             // la boucle continuait de tourner normalement (donc "l'appli
             // semblait fonctionner") pendant que le module, lui, était muet
-            // et ne signalait plus aucun appel entrant. On compte les échecs
-            // consécutifs du test de signal (AT+CSQ sans réponse exploitable)
-            // et, au-delà de WATCHDOG_MAX_FAILURES, on déclenche un
-            // redémarrage complet de la Raspberry Pi - la seule action qui a
-            // résolu l'incident (via le bouton de la page de supervision).
-            int consecutiveSignalFailures = 0;
-            boolean watchdogRebootTriggered = false;
+            // et ne signalait plus aucun appel entrant. Logique extraite dans
+            // SignalWatchdog (testable indépendamment). Chaque déclenchement
+            // est aussi journalisé dans watchdogIncidentStore pour garder une
+            // trace consultable sur la page de supervision.
+            SignalWatchdog signalWatchdog = new SignalWatchdog(configReader.getWATCHDOG_MAX_FAILURES());
 
             // Purge préventive périodique de la mémoire SMS du module
             // (AT+CMGD=1,4). Une notification non sollicitée "+SMS FULL" a
@@ -176,24 +184,39 @@ public class InterphoneApplication {
                     Integer csqValue = SignalHistoryStore.parseCsq(signalTestResponse);
                     if (csqValue != null) {
                         signalHistoryStore.record(csqValue);
-                        if (consecutiveSignalFailures > 0) {
-                            LOGGER.info("Le module répond de nouveau normalement après {} échec(s) consécutif(s).", consecutiveSignalFailures);
+                        if (signalWatchdog.getConsecutiveFailures() > 0) {
+                            LOGGER.info("Le module répond de nouveau normalement après {} échec(s) consécutif(s).", signalWatchdog.getConsecutiveFailures());
                         }
-                        consecutiveSignalFailures = 0;
+                        signalWatchdog.onSignalTestResult(true);
                     } else {
-                        consecutiveSignalFailures++;
+                        boolean shouldReboot = signalWatchdog.onSignalTestResult(false);
                         LOGGER.warn("Réponse AT+CSQ inattendue, mesure non enregistrée dans l'historique ({}/{} échecs consécutifs) : {}",
-                                consecutiveSignalFailures, configReader.getWATCHDOG_MAX_FAILURES(), signalTestResponse);
-                        if (!watchdogRebootTriggered && consecutiveSignalFailures >= configReader.getWATCHDOG_MAX_FAILURES()) {
-                            watchdogRebootTriggered = true;
+                                signalWatchdog.getConsecutiveFailures(), configReader.getWATCHDOG_MAX_FAILURES(), signalTestResponse);
+                        if (shouldReboot) {
                             LOGGER.error("WATCHDOG : le module GSM ne répond plus depuis {} tentatives consécutives (~{} min). Redémarrage automatique de la Raspberry Pi.",
-                                    consecutiveSignalFailures, consecutiveSignalFailures);
+                                    signalWatchdog.getConsecutiveFailures(), signalWatchdog.getConsecutiveFailures());
+                            watchdogIncidentStore.record(signalWatchdog.getConsecutiveFailures());
                             try {
                                 new ProcessBuilder("sudo", "reboot").start();
                             } catch (IOException e) {
                                 LOGGER.error("WATCHDOG : impossible de déclencher le redémarrage automatique (sudoers configuré ? cf README) : {}", e.getMessage(), e);
                             }
                         }
+                    }
+
+                    // Vérification de l'enregistrement réseau (AT+CREG?), en
+                    // complément du CSQ : un signal correct ne garantit pas
+                    // que le module est réellement enregistré sur le réseau
+                    // de l'opérateur (voir NetworkStatusUtil).
+                    serialUtil.sendCommand("AT+CREG?\r\n");
+                    Thread.sleep(1000);
+                    String cregResponse = serialPortReader.getLastMessage();
+                    Boolean registered = NetworkStatusUtil.parseRegistered(cregResponse);
+                    if (supervisionServer != null) {
+                        supervisionServer.updateNetworkStatus(registered);
+                    }
+                    if (registered != null && !registered) {
+                        LOGGER.warn("Module non enregistré sur le réseau mobile (AT+CREG? : {})", cregResponse);
                     }
                 } else {
                     Thread.sleep(1000);
@@ -205,6 +228,18 @@ public class InterphoneApplication {
                     LOGGER.info("Purge périodique de la mémoire SMS du module (AT+CMGD=1,4)...");
                     serialUtil.sendCommand("AT+CMGD=1,4\r\n");
                     Thread.sleep(1000);
+                }
+
+                // Fichier "battement de coeur" (watchdog niveau process, voir
+                // tools/watchdog_process_check.sh et README) : un script
+                // externe (cron) vérifie que ce fichier est régulièrement
+                // mis à jour, et redémarre le service si la boucle
+                // principale elle-même se bloque (deadlock, freeze JVM...),
+                // ce que le watchdog signal seul ne peut pas détecter.
+                try {
+                    Files.write(heartbeatFile.toPath(), String.valueOf(System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
+                } catch (IOException e) {
+                    LOGGER.warn("Impossible d'écrire le fichier heartbeat ({}) : {}", heartbeatFile, e.getMessage());
                 }
             }
 

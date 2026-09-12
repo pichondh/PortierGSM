@@ -1,0 +1,23 @@
+[Unit]
+Description=PortierGSM - Portier GSM/4G automatique
+# Le module GSM/4G doit avoir le temps de s'initialiser sur le bus USB avant
+# que l'application n'essaie d'ouvrir le port serie.
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/PortierGSM-0.2.2
+ExecStart=/home/pi/PortierGSM-0.2.2/bin/PortierGSM
+# Redemarre le process s'il se termine anormalement (crash, exception non
+# rattrapee...), avec un delai pour laisser le module GSM/4G se stabiliser
+# et eviter une boucle de redemarrage trop agressive en cas de probleme
+# persistant (voir StartLimitIntervalSec/StartLimitBurst ci-dessus : au-dela
+# de 5 redemarrages en 5 minutes, systemd arrete d'essayer).
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

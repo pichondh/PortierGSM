@@ -81,6 +81,34 @@
   .status-banner.unknown .status-title { color: var(--unknown); }
   .status-sub { color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
 
+  /* Petites lignes d'info (reseau, fiabilite, dernier redemarrage) dans la
+     carte "Fiabilite" -- format libelle a gauche / valeur a droite, plus
+     compact qu'un bandeau pour des informations secondaires. */
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: var(--muted); }
+  .info-value { text-align: right; }
+
+  .badge {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .badge.good { background: var(--good-bg); color: var(--good); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad { background: var(--bad-bg); color: var(--bad); }
+  .badge.unknown { background: var(--unknown-bg); color: var(--unknown); }
+
   .today-hours {
     text-align: center;
     color: var(--muted);
@@ -204,6 +232,22 @@
   <div id="today-hours" class="today-hours">--</div>
 
   <div class="card">
+    <h2>Fiabilité</h2>
+    <div class="info-row">
+      <span class="info-label">Réseau mobile</span>
+      <span id="network-badge" class="badge unknown">Inconnu</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Appels (30 derniers jours)</span>
+      <span id="reliability-value" class="info-value">--</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Dernier redémarrage automatique</span>
+      <span id="last-reboot-value" class="info-value">--</span>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Derniers appels</h2>
     <ul id="calls-list" class="calls-list"></ul>
     <div id="calls-empty" class="calls-empty" style="display:none">Aucun appel enregistré pour le moment.</div>
@@ -241,6 +285,20 @@
           </div>
           <div id="hours-status" class="status-msg"></div>
         </form>
+      </div>
+
+      <div class="advanced-block">
+        <h3>Journal des incidents watchdog</h3>
+        <ul id="watchdog-list" class="calls-list"></ul>
+        <div id="watchdog-empty" class="calls-empty" style="display:none">Aucun incident enregistré pour le moment.</div>
+      </div>
+
+      <div class="advanced-block">
+        <h3>Export du journal des appels</h3>
+        <div class="reboot-desc">Télécharge l'historique complet des appels au format CSV.</div>
+        <div class="actions">
+          <a href="/api/calls/export" class="btn btn-primary" style="text-decoration:none; display:inline-block;">Télécharger le CSV</a>
+        </div>
       </div>
 
       <div class="advanced-block">
@@ -349,9 +407,63 @@
     });
   }
 
+  function updateReliabilityCard(data) {
+    var networkBadge = document.getElementById("network-badge");
+    if (data.networkRegistered === true) {
+      networkBadge.textContent = "Enregistré";
+      networkBadge.className = "badge good";
+    } else if (data.networkRegistered === false) {
+      networkBadge.textContent = "Non enregistré";
+      networkBadge.className = "badge bad";
+    } else {
+      networkBadge.textContent = "Inconnu";
+      networkBadge.className = "badge unknown";
+    }
+
+    var accepted = data.callsAccepted30d || 0;
+    var refused = data.callsRefused30d || 0;
+    var reliabilityEl = document.getElementById("reliability-value");
+    if (accepted + refused === 0) {
+      reliabilityEl.textContent = "Aucun appel enregistré";
+    } else {
+      reliabilityEl.textContent = accepted + " ouvert" + (accepted > 1 ? "s" : "") +
+        " / " + refused + " refusé" + (refused > 1 ? "s" : "");
+    }
+
+    var lastRebootEl = document.getElementById("last-reboot-value");
+    lastRebootEl.textContent = data.lastWatchdogRebootTs ? formatFriendly(data.lastWatchdogRebootTs) : "Jamais";
+  }
+
+  function fetchWatchdogIncidents() {
+    fetch("/api/watchdog-incidents?limit=10").then(function (r) { return r.json(); }).then(function (data) {
+      var incidents = data.incidents || [];
+      var list = document.getElementById("watchdog-list");
+      var emptyMsg = document.getElementById("watchdog-empty");
+      list.innerHTML = "";
+      if (!incidents.length) {
+        emptyMsg.style.display = "block";
+        return;
+      }
+      emptyMsg.style.display = "none";
+      incidents.forEach(function (inc) {
+        var li = document.createElement("li");
+        li.innerHTML =
+          "<div class=\"call-icon\">🔁</div>" +
+          "<div class=\"call-main\">" +
+            "<div class=\"call-time\">" + formatFriendly(inc.ts) + "</div>" +
+            "<div class=\"call-number\">" + inc.failures + " échecs consécutifs</div>" +
+          "</div>";
+        list.appendChild(li);
+      });
+    }).catch(function (e) {
+      console.error("Erreur /api/watchdog-incidents", e);
+    });
+  }
+
   function fetchStatus() {
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (data) {
       updateStatusBanner(data);
+      updateReliabilityCard(data);
       updateTodayHours(data.openingHours);
       updateHoursForm(data.openingHours);
 
@@ -517,8 +629,10 @@
   fetchStatus();
   fetchHistory(currentDays);
   fetchCalls();
+  fetchWatchdogIncidents();
   setInterval(fetchStatus, 30000);
   setInterval(fetchCalls, 30000);
+  setInterval(fetchWatchdogIncidents, 60000);
 </script>
 </body>
 </html>

@@ -49,6 +49,24 @@ public class CallLogStore {
         }
     }
 
+    /**
+     * Compte agrégé des appels acceptés/refusés sur une période donnée,
+     * pour un badge de fiabilité simple sur la page de supervision.
+     */
+    public static class Stats {
+        public final int accepted;
+        public final int refused;
+
+        public Stats(int accepted, int refused) {
+            this.accepted = accepted;
+            this.refused = refused;
+        }
+
+        public int total() {
+            return accepted + refused;
+        }
+    }
+
     private final File file;
     private final int retentionDays;
     private int appendsSincePrune = 0;
@@ -150,6 +168,42 @@ public class CallLogStore {
             return all.subList(0, limit);
         }
         return all;
+    }
+
+    /**
+     * Compte les appels acceptés/refusés sur les <days> derniers jours,
+     * pour un badge de fiabilité simple ("X ouverts / Y refusés").
+     */
+    public synchronized Stats getStats(int days) {
+        int accepted = 0;
+        int refused = 0;
+        if (file.exists()) {
+            LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    CallEntry entry = parseLine(line);
+                    if (entry != null && !entry.timestamp.isBefore(cutoff)) {
+                        if (entry.accepted) {
+                            accepted++;
+                        } else {
+                            refused++;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                LOGGER.error("Impossible de lire le journal d'appels pour les statistiques : {}", e.getMessage(), e);
+            }
+        }
+        return new Stats(accepted, refused);
+    }
+
+    /**
+     * Chemin du fichier CSV brut, pour l'export téléchargeable depuis la
+     * page de supervision (voir SupervisionServer#handleCallsExport).
+     */
+    public File getFile() {
+        return file;
     }
 
     private CallEntry parseLine(String line) {

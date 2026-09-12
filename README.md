@@ -191,7 +191,173 @@ WATCHDOG_MAX_FAILURES=3
 SMS_PURGE_INTERVAL_MINUTES=60
 ```
 
-Lancement du programme au démarrage du RPI
-/etc/rc.local
+## Évolutions du 12/09/2026 (suite à l'incident du watchdog)
+
+Après la mise en place du watchdog et de la purge SMS (section précédente),
+plusieurs évolutions complémentaires ont été apportées à la page de
+supervision et à la fiabilité générale de l'application.
+
+### Journal des incidents watchdog
+
+Chaque déclenchement du watchdog (redémarrage automatique suite à des
+échecs consécutifs du test de signal) est désormais journalisé dans
+`conf/watchdog_incidents.csv` (horodatage + nombre d'échecs consécutifs au
+moment du déclenchement), selon le même principe que l'historique du signal
+ou le journal des appels. Consultable dans la section "Réglages avancés" de
+la page de supervision, et purgé au bout de
+`WATCHDOG_INCIDENT_RETENTION_DAYS` jours (90 par défaut — volontairement
+plus long que les autres historiques, ces événements étant rares et utiles
+à suivre sur la durée pour repérer une dégradation progressive du module ou
+de sa connectique).
+
+```
+WATCHDOG_INCIDENT_RETENTION_DAYS=90
+```
+
+### Vérification de l'enregistrement réseau (`AT+CREG?`)
+
+En complément du test de qualité de signal (`AT+CSQ`), l'application
+interroge désormais aussi `AT+CREG?` à chaque cycle de test : un signal CSQ
+correct n'implique pas forcément que le module est réellement enregistré
+sur le réseau de l'opérateur (roaming en cours de négociation, désinscription
+temporaire...). L'état (`Enregistré` / `Non enregistré` / `Inconnu`) est
+affiché sur la page de supervision (voir plus bas) et un message
+d'avertissement est ajouté aux logs si le module se déclare non enregistré.
+Voir `NetworkStatusUtil.java` pour le détail du parsing des réponses
+`+CREG:`.
+
+### Watchdog niveau process (heartbeat + systemd)
+
+Le watchdog logiciel existant (redémarrage après échecs consécutifs du
+test AT+CSQ) ne peut rien détecter si c'est la boucle principale
+elle-même qui se bloque totalement (deadlock, freeze de la JVM...) : le
+code qui déclenche le redémarrage ne s'exécute alors plus du tout. Un
+second niveau de protection a été ajouté pour couvrir ce cas :
+
+1. **Fichier "battement de cœur"** : à chaque tour de la boucle principale
+   (~1 fois par seconde), l'application écrit l'horodatage courant dans
+   `conf/heartbeat.txt`.
+2. **Script de vérification externe** (`tools/watchdog_process_check.sh`,
+   lancé par `cron`) : vérifie que ce fichier a bien été mis à jour dans
+   les `MAX_AGE_SECONDS` dernières secondes (300 par défaut, soit 5
+   minutes). S'il est trop vieux ou absent, le script redémarre le service
+   via `systemctl restart portiergsm`.
+3. **Service systemd** (`tools/portiergsm.service`) : remplace le
+   lancement historique via `/etc/rc.local` (voir plus bas) pour permettre
+   à la fois ce redémarrage piloté par cron et un redémarrage automatique
+   en cas de crash du process (`Restart=on-failure`).
+
+**Installation sur la Raspberry Pi :**
+
+```bash
+# 1. Copier et activer le service systemd (adapter le chemin si l'appli
+#    n'est pas dans /home/pi/PortierGSM-0.2.2 ou ne tourne pas sous "pi")
+sudo cp tools/portiergsm.service /etc/systemd/system/portiergsm.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now portiergsm
+
+# 2. Rendre le script de vérification exécutable
+chmod +x tools/watchdog_process_check.sh
+
+# 3. Ajouter une tâche cron (root, car systemctl restart nécessite les
+#    droits root — contrairement au watchdog logiciel qui tourne sous
+#    l'utilisateur "pi" et passe par une règle sudoers dédiée)
+sudo crontab -e
+# ajouter la ligne :
+* * * * * /home/pi/PortierGSM-0.2.2/tools/watchdog_process_check.sh >> /home/pi/portier_log/watchdog_process_check.log 2>&1
+```
+
+Si l'application est encore lancée via l'ancienne méthode `/etc/rc.local`
+(voir tout en bas de ce README), il est recommandé de retirer cette ligne
+après être passé au service systemd, pour éviter un double lancement.
+
+### Page de supervision : fiabilité et export
+
+La page de supervision affiche désormais une carte "Fiabilité" (juste sous
+les horaires du jour) avec :
+
+- **État du réseau mobile** (`Enregistré` / `Non enregistré` / `Inconnu`,
+  voir `AT+CREG?` ci-dessus).
+- **Appels des 30 derniers jours** (nombre ouverts / refusés), calculé à
+  partir du journal des appels déjà existant.
+- **Dernier redémarrage automatique**, avec l'horodatage du dernier
+  incident watchdog enregistré (ou "Jamais").
+
+Dans les réglages avancés :
+
+- **Journal des incidents watchdog** (voir plus haut), affiché sous forme
+  de liste, comme le journal des appels.
+- **Export CSV du journal des appels** (`/api/calls/export`) : téléchargement
+  direct du fichier `conf/call_log.csv` complet, utile pour une analyse plus
+  poussée en dehors de la page (tableur...).
+
+Le bouton "tester maintenant" envisagé initialement n'a **pas** été ajouté
+(jugé sans utilité réelle : un test manuel se fait simplement en appelant le
+numéro de la carte SIM).
+
+### Sécurité : protection anti brute-force (sans HTTPS)
+
+La page de supervision reste volontairement en HTTP simple (pas de HTTPS) :
+un certificat auto-signé déclencherait un avertissement de sécurité dans le
+navigateur à chaque connexion, ce qui va à l'encontre de l'objectif premier
+de cette page — rester triviale d'accès pour une utilisation non technique.
+Ce choix reste raisonnable pour un accès strictement réseau local, jamais
+exposé sur Internet (voir avertissement plus haut).
+
+En contrepartie, l'authentification HTTP Basic (`BasicAuthenticator` du JDK)
+a été remplacée par un `Authenticator` personnalisé
+(`RateLimitedAuthenticator`, dans `SupervisionServer.java`) qui verrouille
+temporairement une adresse IP après plusieurs échecs consécutifs :
+
+- Au bout de **5 tentatives échouées en moins de 5 minutes**, l'IP est
+  verrouillée pendant **15 minutes** (réponse HTTP 429, avec en-tête
+  `Retry-After`) — le mot de passe n'est alors même plus vérifié pendant le
+  verrouillage.
+- Une authentification réussie réinitialise le compteur de cette IP.
+- Ces valeurs (`MAX_ATTEMPTS`, `WINDOW_MILLIS`, `LOCKOUT_MILLIS`) sont pour
+  l'instant codées en dur dans `RateLimitedAuthenticator` (pas exposées
+  dans `config.properties`, le cas d'usage ne le justifiant pas
+  aujourd'hui).
+
+Cette protection réduit fortement le risque d'un mot de passe deviné par
+essais répétés, sans les contraintes d'un certificat TLS.
+
+### Qualité du code
+
+- **Correction d'un bug d'encodage dans les logs** : `logback.xml` ne
+  précisait pas de charset explicite pour ses appenders (fichier et
+  console), qui utilisaient donc le charset par défaut de la JVM — dépendant
+  de la locale du système. Sur une Raspberry Pi OS en locale non-UTF-8
+  (fréquent sur une installation minimale), les caractères accentués
+  écrits par l'application en UTF-8 étaient mal réencodés à l'écriture,
+  produisant du texte illisible dans les logs (ex : "période" au lieu de
+  "période" accentué). Un `<charset>UTF-8</charset>` explicite a été ajouté
+  aux deux encodeurs (`FILE` et `STDOUT`).
+- **Logique du watchdog extraite et testée unitairement** : le compteur
+  d'échecs consécutifs et la décision de déclenchement, auparavant inline
+  dans la boucle principale d'`InterphoneApplication`, ont été extraits
+  dans une classe dédiée sans dépendance I/O
+  (`com.edaxortho.interphone.watchdog.SignalWatchdog`), et le parsing des
+  réponses `AT+CREG?` dans `com.edaxortho.interphone.util.NetworkStatusUtil`.
+  Ce sont les tout premiers tests unitaires du projet
+  (`src/test/java/...`, JUnit 5 — voir `build.gradle`), lancés via
+  `./gradlew test`. Objectif : pouvoir vérifier la logique de déclenchement
+  du redémarrage automatique sans avoir besoin d'un vrai port série ni de
+  reproduire un incident réel pour la tester.
+
+## Lancement du programme au démarrage du RPI
+
+Deux méthodes possibles :
+
+**Méthode historique (`/etc/rc.local`)** :
+```
 /home/pi/PortierGSM/bin/PortierGSM
+```
+
+**Méthode recommandée (service systemd)** : voir la section "Watchdog
+niveau process (heartbeat + systemd)" ci-dessus — permet en plus un
+redémarrage automatique du service en cas de crash (`Restart=on-failure`)
+et la vérification périodique par `cron` via le fichier heartbeat. Ne pas
+combiner les deux méthodes (retirer la ligne de `/etc/rc.local` si vous
+passez au service systemd, pour éviter un double lancement).
 

@@ -27,6 +27,10 @@ dependencies {
 	implementation 'org.slf4j:slf4j-api:2.0.6'
 	implementation 'ch.qos.logback:logback-classic:1.4.5'
 	implementation 'commons-cli:commons-cli:1.5.0'
+
+	// Tests unitaires (logique pure, sans port serie ni reseau reel -- voir
+	// src/test/java, ex: SignalWatchdog, NetworkStatusUtil).
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 //	implementation group: 'de.dfki.mary', name: 'voice-cmu-slt-hsmm', version: '5.2.1', {
 //		exclude group: 'com.twmacinta', module: 'fast-md5'
 //		exclude group: 'gov.nist.math', module: 'Jampack'
@@ -36,6 +40,10 @@ dependencies {
 //		exclude group: 'gov.nist.math', module: 'Jampack'
 //	}
 //	implementation group: 'javazoom', name: 'jlayer', version: '1.0.1'
+}
+
+test {
+	useJUnitPlatform()
 }
 
 // Numero de build (horodatage genere a chaque build) affiche sur la page de
@@ -63,4 +71,3 @@ task generateBuildInfo {
 }
 
 processResources.dependsOn generateBuildInfo
-

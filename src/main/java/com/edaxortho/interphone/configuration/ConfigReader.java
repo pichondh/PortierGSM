@@ -36,16 +36,22 @@ public class ConfigReader {
     private Integer SIGNAL_HISTORY_RETENTION_DAYS;
     private Integer CALL_LOG_RETENTION_DAYS;
 
-    // Watchdog logiciel (voir InterphoneApplication) : nombre de tests de
-    // signal (AT+CSQ) consécutifs sans réponse exploitable du module avant
-    // de considérer qu'il est figé/muet et de déclencher un redémarrage
-    // automatique de la Raspberry Pi. Ajouté suite à un incident du
-    // 12/09/2026 où le module SIM7600E-H a cessé de répondre à toute
-    // commande AT pendant plus de 5h (donc plus aucun appel entrant
-    // détecté) sans que l'application elle-même ne plante ni ne s'en
-    // aperçoive : seul un redémarrage manuel via la page de supervision a
-    // résolu le problème.
+    // Watchdog logiciel (voir com.edaxortho.interphone.watchdog.SignalWatchdog
+    // et InterphoneApplication) : nombre de tests de signal (AT+CSQ)
+    // consécutifs sans réponse exploitable du module avant de considérer
+    // qu'il est figé/muet et de déclencher un redémarrage automatique de la
+    // Raspberry Pi. Ajouté suite à un incident du 12/09/2026 où le module
+    // SIM7600E-H a cessé de répondre à toute commande AT pendant plus de 5h
+    // (donc plus aucun appel entrant détecté) sans que l'application
+    // elle-même ne plante ni ne s'en aperçoive : seul un redémarrage manuel
+    // via la page de supervision a résolu le problème.
     private Integer WATCHDOG_MAX_FAILURES;
+
+    // Rétention (en jours) du journal des déclenchements du watchdog
+    // (conf/watchdog_incidents.csv, voir WatchdogIncidentStore). Plus longue
+    // que les autres historiques : ces événements sont rares et utiles à
+    // suivre sur la durée pour repérer une dégradation progressive.
+    private Integer WATCHDOG_INCIDENT_RETENTION_DAYS;
 
     // Intervalle (en minutes) entre deux purges préventives de la mémoire
     // SMS du module (AT+CMGD=1,4). Une mémoire pleine (notification
@@ -110,7 +116,7 @@ public class ConfigReader {
             WEB_USERNAME = prop.getProperty("WEB_USERNAME", "admin");
             WEB_PASSWORD = prop.getProperty("WEB_PASSWORD", "");
             if (WEB_PASSWORD == null || WEB_PASSWORD.isEmpty()) {
-                LOGGER.warn("WEB_PASSWORD non défini dans config.properties : la page de supervision sera inaccessible tant qu'un mot de passe n'est pas configuré.");
+                LOGGER.warn("WEB_PASSWORD non défini dans config.properties : la page de supervision sera inaccessible tant qu'un mot de passe n'a pas été configuré.");
             }
             try {
                 SIGNAL_HISTORY_RETENTION_DAYS = Integer.parseInt(prop.getProperty("SIGNAL_HISTORY_RETENTION_DAYS", "30").trim());
@@ -129,13 +135,20 @@ public class ConfigReader {
                 WATCHDOG_MAX_FAILURES = 3;
             }
             try {
+                WATCHDOG_INCIDENT_RETENTION_DAYS = Integer.parseInt(prop.getProperty("WATCHDOG_INCIDENT_RETENTION_DAYS", "90").trim());
+            } catch (NumberFormatException e) {
+                LOGGER.warn("WATCHDOG_INCIDENT_RETENTION_DAYS invalide dans config.properties, utilisation de 90 par défaut.");
+                WATCHDOG_INCIDENT_RETENTION_DAYS = 90;
+            }
+            try {
                 SMS_PURGE_INTERVAL_MINUTES = Integer.parseInt(prop.getProperty("SMS_PURGE_INTERVAL_MINUTES", "60").trim());
             } catch (NumberFormatException e) {
                 LOGGER.warn("SMS_PURGE_INTERVAL_MINUTES invalide dans config.properties, utilisation de 60 par défaut.");
                 SMS_PURGE_INTERVAL_MINUTES = 60;
             }
             LOGGER.info("WEB_PORT = {}, WEB_USERNAME = {}", WEB_PORT, WEB_USERNAME);
-            LOGGER.info("WATCHDOG_MAX_FAILURES = {}, SMS_PURGE_INTERVAL_MINUTES = {}", WATCHDOG_MAX_FAILURES, SMS_PURGE_INTERVAL_MINUTES);
+            LOGGER.info("WATCHDOG_MAX_FAILURES = {}, WATCHDOG_INCIDENT_RETENTION_DAYS = {}, SMS_PURGE_INTERVAL_MINUTES = {}",
+                    WATCHDOG_MAX_FAILURES, WATCHDOG_INCIDENT_RETENTION_DAYS, SMS_PURGE_INTERVAL_MINUTES);
 
             SYNTHESE_VOCALE = Boolean.parseBoolean(prop.getProperty("SYNTHESE_VOCALE"));
             TEXTE_FERMETURE = prop.getProperty("TEXTE_FERMETURE");
@@ -235,6 +248,10 @@ public class ConfigReader {
 
     public Integer getWATCHDOG_MAX_FAILURES() {
         return WATCHDOG_MAX_FAILURES;
+    }
+
+    public Integer getWATCHDOG_INCIDENT_RETENTION_DAYS() {
+        return WATCHDOG_INCIDENT_RETENTION_DAYS;
     }
 
     public Integer getSMS_PURGE_INTERVAL_MINUTES() {
