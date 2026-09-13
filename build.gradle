@@ -24,8 +24,13 @@ repositories {
 
 dependencies {
 	implementation 'com.fazecast:jSerialComm:[2.0.0,3.0.0)'
-	implementation 'org.slf4j:slf4j-api:2.0.6'
-	implementation 'ch.qos.logback:logback-classic:1.4.5'
+	implementation 'org.slf4j:slf4j-api:2.0.18'
+	// 1.6.3 corrige plusieurs CVE remontees par l'analyse de securite d'IntelliJ
+	// sur la 1.4.5 (CVE-2023-6378, CVE-2024-12798, CVE-2024-12801,
+	// CVE-2025-11226, CVE-2026-1225) : JDK 11 minimum requis, compatible avec
+	// sourceCompatibility ci-dessus. slf4j-api aligne sur la version testee
+	// par le projet logback pour cette release (2.0.18).
+	implementation 'ch.qos.logback:logback-classic:1.6.3'
 	implementation 'commons-cli:commons-cli:1.5.0'
 
 	// Tests unitaires (logique pure, sans port serie ni reseau reel -- voir
@@ -59,7 +64,11 @@ sourceSets {
 	}
 }
 
-task generateBuildInfo {
+// tasks.register (plutot que task xxx {...}) : configure la tache
+// paresseusement, seulement si elle est effectivement necessaire a
+// l'execution -- suggestion d'IntelliJ pour eviter une configuration
+// systematique inutile a chaque invocation de Gradle.
+def generateBuildInfoTask = tasks.register('generateBuildInfo') {
 	def outputDir = file("$buildDir/generated/resources")
 	outputs.dir(outputDir)
 	doLast {
@@ -70,4 +79,4 @@ task generateBuildInfo {
 	}
 }
 
-processResources.dependsOn generateBuildInfo
+processResources.dependsOn generateBuildInfoTask
